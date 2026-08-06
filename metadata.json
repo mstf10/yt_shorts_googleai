@@ -1,0 +1,8 @@
+{
+  "name": "YT Shorts AI Generator",
+  "description": "Google Gemini and Pexels based automated YouTube Shorts video script, audio voiceover, and 9:16 vertical video player preview system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
