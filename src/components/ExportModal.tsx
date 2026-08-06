@@ -74,102 +74,112 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative my-8">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-md p-2 sm:p-4 md:p-6 overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full h-full flex flex-col p-3.5 sm:p-6 space-y-3 sm:space-y-4 shadow-2xl relative overflow-hidden">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4 gap-2">
+          <div className="flex items-center space-x-2.5">
+            <div className="p-2 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 shrink-0">
+              <Download className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-xl font-bold text-slate-100 leading-tight">Video Dışa Aktarma & Stüdyo Modu</h3>
+              <p className="text-[11px] sm:text-xs text-slate-400">9:16 dikey video oluşturma, senaryo dışa aktarma ve kod entegrasyonu</p>
+            </div>
+          </div>
 
-        <div className="flex items-center space-x-2">
-          <Download className="w-5 h-5 text-red-500" />
-          <h3 className="text-lg font-bold text-slate-100">Export Video & Script Assets</h3>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer min-h-[38px] shrink-0"
+          >
+            <X className="w-4 h-4" />
+            <span className="hidden sm:inline">Kapat</span>
+          </button>
         </div>
 
         {/* Export Format Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 border-b border-slate-800 pb-2.5 overflow-x-auto scrollbar-none shrink-0">
           <button
             onClick={() => setActiveTab('video')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition active:scale-95 cursor-pointer min-h-[38px] ${
               activeTab === 'video'
-                ? 'bg-red-500 text-white shadow-md'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white shadow-lg shadow-red-500/20'
+                : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Video className="w-3.5 h-3.5" /> 🎬 Render Video (MP4/WebM)
+            <Video className="w-4 h-4" /> 🎬 HD Video Render
           </button>
           <button
             onClick={() => setActiveTab('json')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition active:scale-95 cursor-pointer min-h-[38px] ${
               activeTab === 'json'
-                ? 'bg-red-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                ? 'bg-red-500 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Code className="w-3.5 h-3.5" /> JSON Schema
+            <Code className="w-4 h-4" /> JSON
           </button>
           <button
             onClick={() => setActiveTab('markdown')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition active:scale-95 cursor-pointer min-h-[38px] ${
               activeTab === 'markdown'
-                ? 'bg-red-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                ? 'bg-red-500 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'
             }`}
           >
-            <FileText className="w-3.5 h-3.5" /> Markdown
+            <FileText className="w-4 h-4" /> Markdown
           </button>
           <button
             onClick={() => setActiveTab('python')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition active:scale-95 cursor-pointer min-h-[38px] ${
               activeTab === 'python'
-                ? 'bg-red-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                ? 'bg-red-500 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Terminal className="w-3.5 h-3.5" /> Python CLI Command
+            <Terminal className="w-4 h-4" /> Python CLI
           </button>
         </div>
 
-        {/* Video Renderer View */}
-        {activeTab === 'video' ? (
-          <VideoExporter
-            topic={topic}
-            scenes={scenes}
-            selectedVoice={selectedVoice}
-            speechRate={speechRate}
-            language={language}
-          />
-        ) : (
-          <>
-            {/* Code Content View */}
-            <div className="relative">
-              <pre className="bg-slate-950 p-4 rounded-xl text-xs text-slate-200 font-mono overflow-x-auto max-h-64 border border-slate-800">
-                {getExportText()}
-              </pre>
-            </div>
+        {/* Tab Content Area */}
+        <div className="flex-1 overflow-y-auto pr-1">
+          {activeTab === 'video' ? (
+            <VideoExporter
+              topic={topic}
+              scenes={scenes}
+              selectedVoice={selectedVoice}
+              speechRate={speechRate}
+              language={language}
+            />
+          ) : (
+            <div className="flex flex-col h-full space-y-4">
+              <div className="relative flex-1">
+                <pre className="bg-slate-950 p-4 rounded-xl text-xs text-slate-200 font-mono overflow-auto h-full max-h-[calc(100vh-280px)] border border-slate-800">
+                  {getExportText()}
+                </pre>
+              </div>
 
-            {/* Actions */}
-            <div className="flex justify-end space-x-3 pt-2">
-              <button
-                onClick={handleCopy}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition"
-              >
-                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Copied!' : 'Copy Content'}</span>
-              </button>
+              {/* Actions */}
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  onClick={handleCopy}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center gap-2 transition cursor-pointer"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  <span>{copied ? 'Kopyalandı!' : 'Metni Kopyala'}</span>
+                </button>
 
-              <button
-                onClick={handleDownloadText}
-                className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-md transition"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download File</span>
-              </button>
+                <button
+                  onClick={handleDownloadText}
+                  className="px-5 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md transition cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Dosya Olarak İndir</span>
+                </button>
+              </div>
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

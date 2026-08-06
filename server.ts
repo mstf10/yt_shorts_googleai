@@ -46,27 +46,27 @@ function getFallbackScenes(topic: string, language: string) {
     return [
       {
         scene: 1,
-        text: `${topic} hakkında bilmeniz gereken en şaşırtıcı ve bilimsel gerçekleri inceliyoruz.`,
+        text: `${topic}, bilimin ve doğanın en büyüleyici konularından biridir.`,
         visual_query: `${topic} mysterious epic cinematic portrait`,
       },
       {
         scene: 2,
-        text: `Yapılan son araştırmalar, bu konuda bilinen birçok kavramın düşündüğümüzden çok daha derin olduğunu gösteriyor.`,
+        text: `${topic} yapısı ve temel özellikleri, fiziksel ve tarihsel sınırları doğrudan etkiler.`,
         visual_query: `${topic} research technology motion`,
       },
       {
         scene: 3,
-        text: `Özellikle gözlemlenen detaylar ve veriler, alanındaki uzmanları bile heyecanlandırmaya devam ediyor.`,
+        text: `${topic} etrafında gözlemlenen enerji ve dinamikler, çevresindeki tüm faktörleri dönüştürür.`,
         visual_query: `abstract cosmic particle light motion`,
       },
       {
         scene: 4,
-        text: `Tarihsel ve bilimsel açıdan incelendiğinde, bu durumun benzersiz bir yapıya sahip olduğu açıkça görülüyor.`,
+        text: `Araştırmacıların ${topic} üzerinde gerçekleştirdiği ölçümler, temel anlayışımızı derinleştirir.`,
         visual_query: `futuristic digital neon technology portrait`,
       },
       {
         scene: 5,
-        text: `Gelişen teknoloji ve yeni keşiflerle birlikte ${topic} hakkındaki tüm detaylar gün geçtikçe daha da netleşiyor.`,
+        text: `Gelişen yeni teknolojiler sayesinde ${topic} hakkındaki somut veriler ve keşifler gün geçtikçe netleşiyor.`,
         visual_query: `digital futuristic cinematic light motion`,
       },
     ];
@@ -75,27 +75,27 @@ function getFallbackScenes(topic: string, language: string) {
   return [
     {
       scene: 1,
-      text: `Exploring key scientific facts and deep insights about ${topic}.`,
+      text: `${topic} is one of the most remarkable subjects in science and nature.`,
       visual_query: `${topic} mysterious epic background`,
     },
     {
       scene: 2,
-      text: "Recent observations show key details that challenge standard assumptions in the field.",
+      text: `The core structure and fundamental mechanics of ${topic} push our understanding to new limits.`,
       visual_query: `${topic} research technology motion`,
     },
     {
       scene: 3,
-      text: "Detailed analysis reveals intricate patterns that continue to fascinate researchers worldwide.",
+      text: `Observed data surrounding ${topic} reveals extraordinary dynamics and unique physical traits.`,
       visual_query: "abstract geometric laser technology light motion",
     },
     {
       scene: 4,
-      text: "When examined historically and scientifically, its unique structure stands out remarkably.",
+      text: `Scientific measurements of ${topic} provide key insights that reshape fundamental research models.`,
       visual_query: "futuristic digital technology 4k portrait",
     },
     {
       scene: 5,
-      text: `With advancing tools and new findings, the story of ${topic} becomes clearer every single day.`,
+      text: `With advancing observational tools, breakthrough discoveries about ${topic} continue to be revealed.`,
       visual_query: "futuristic digital neon glow particle motion",
     },
   ];
@@ -142,22 +142,27 @@ app.post("/api/generate-script", async (req, res) => {
         ? "En français"
         : "In English";
 
-    const prompt = `You are an expert, highly factual YouTube Shorts scriptwriter and documentarian.
+    const prompt = `You are a world-class YouTube Shorts documentary scriptwriter.
 Topic: "${topic}".
 Language requirement: Generate narration script text strictly ${langInstruction}.
 
-Task: Create a highly engaging, 100% factual 4 to 6 scene YouTube Short storyboard.
+Task: Create a highly engaging, 100% factual, 4 to 6 scene YouTube Short script.
 
-STRICT CONTENT RULES:
-1. ACCURACY & FACTS FIRST: Every scene must deliver clear, interesting, factual information about "${topic}".
-2. NO CALLS TO ACTION: DO NOT ask viewers to like, comment, subscribe, share, or ask questions like "Sen ne düşünüyorsun?", "Siz nasıl buldunuz?", "Yorumlarda belirtin", "Kanala abone olun", "What do you think?", or "Leave a comment below".
-3. FINAL SCENE RULE: The final scene must be a strong, punchy, informative summary or fascinating concluding fact about "${topic}". Absolutely NO meta social media call-outs!
+STRICT CONTENT & NO-FLUFF RULES:
+1. DIRECT FACTS ONLY: Every single scene MUST state a specific, concrete, detailed scientific, historical, or real-world fact directly about "${topic}".
+2. ZERO LAZY FLUFF & NO BEATING AROUND THE BUSH:
+   - DO NOT write filler sentences like "Yapılan araştırmalar şaşırtıcı sonuçlar verdi", "Bu konu hakkında bilinen çok şey var", "İşte bilinmeyen gerçekler", "Gelin birlikte inceleyelim", or "X konusu oldukça merak uyandıran bir alandır".
+   - Jump STRAIGHT into real facts, numbers, names, locations, dates, or physical mechanisms in every single line!
+   - Example BAD: "Kara delikler hakkında şaşırtıcı bilgiler var."
+   - Example GOOD: "Samanyolu'nun merkezindeki Sagittarius A* kara deliğinin kütlesi Güneş'in tam 4 milyon katıdır."
+3. NO CALLS TO ACTION: DO NOT ask viewers to like, comment, subscribe, share, or ask questions like "Sen ne düşünüyorsun?", "Yorumlarda belirtin", "Kanala abone olun", "What do you think?", or "Leave a comment below".
+4. FINAL SCENE: A punchy, memorable concluding fact or summary directly about "${topic}". No meta social media call-outs!
 
 JSON Format required:
 [
   {
     "scene": 1,
-    "text": "Hook line introducing the topic in ${langInstruction}",
+    "text": "Direct, punchy concrete fact specifically about ${topic} in ${langInstruction}",
     "visual_query": "English 2-4 keywords description for stock video search (e.g. 'cinematic black hole galaxy', 'ancient pyramid sunset')"
   },
   ...
@@ -173,14 +178,24 @@ Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible
       });
       responseText = response.text || "";
     } catch (modelErr: any) {
-      console.log("gemini-3.6-flash notice:", modelErr?.status || modelErr?.message || "Using smart storyboard fallback");
-      return res.json({
-        topic,
-        language,
-        scenes: getFallbackScenes(topic, language),
-        fallback: true,
-        notice: "Gemini API kotası veya yanıt süresi nedeniyle akıllı senaryo motoru kullanıldı.",
-      });
+      // Try fallback model if 3.6-flash is rate limited or unavailable
+      try {
+        console.log("gemini-3.6-flash rate-limited or busy, attempting gemini-2.5-flash fallback...");
+        const fallbackRes = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+        });
+        responseText = fallbackRes.text || "";
+      } catch (fallbackErr: any) {
+        console.log("Gemini models quota reached, activating smart factual storyboard template.");
+        return res.json({
+          topic,
+          language,
+          scenes: getFallbackScenes(topic, language),
+          fallback: true,
+          notice: "Gemini API kotası veya yanıt süresi nedeniyle akıllı senaryo motoru kullanıldı.",
+        });
+      }
     }
 
     const parsedScenes = parseGeminiJson(responseText);
@@ -287,6 +302,8 @@ app.post("/api/fetch-pexels-video", async (req, res) => {
   }
 });
 
+let geminiTtsCooldownUntil = 0;
+
 // API: High Quality Gemini / Multi-Engine TTS Voiceover Audio proxy
 app.get("/api/tts", async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -302,8 +319,8 @@ app.get("/api/tts", async (req, res) => {
 
     const safeText = text.substring(0, 300);
 
-    // 1. Try Gemini Audio Generation if API key is provided
-    if (effectiveApiKey) {
+    // 1. Try Gemini Audio Generation if API key is provided and not in rate-limit cooldown
+    if (effectiveApiKey && Date.now() > geminiTtsCooldownUntil) {
       try {
         const ai = new GoogleGenAI({
           apiKey: effectiveApiKey,
@@ -330,7 +347,14 @@ app.get("/api/tts", async (req, res) => {
           return res.send(buffer);
         }
       } catch (geminiAudioErr: any) {
-        console.log("Gemini TTS audio notice (falling back to Google TTS):", geminiAudioErr?.message || geminiAudioErr);
+        const errMsg = geminiAudioErr?.message || String(geminiAudioErr);
+        if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+          // Cooldown Gemini TTS audio calls for 90 seconds to prevent 429 spam
+          geminiTtsCooldownUntil = Date.now() + 90000;
+          console.log("[TTS Info] Gemini Audio API rate limit (429) hit. Activated 90s cooldown. Using fast Google TTS engine.");
+        } else {
+          console.log("[TTS Info] Gemini Audio fallback to Google TTS:", errMsg.substring(0, 100));
+        }
       }
     }
 

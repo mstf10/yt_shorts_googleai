@@ -401,105 +401,148 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
   };
 
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-5">
+    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-6">
       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
         <div className="flex items-center space-x-2">
           <Film className="w-5 h-5 text-red-500" />
-          <h4 className="font-bold text-slate-100 text-sm">9:16 Shorts Video Renderer & Exporter</h4>
+          <h4 className="font-bold text-slate-100 text-sm">9:16 Shorts Full HD Render Stüdyosu</h4>
         </div>
 
-        <span className="text-[10px] bg-red-500/10 text-red-400 font-bold px-2 py-0.5 rounded border border-red-500/20 uppercase">
-          HD Export
+        <span className="text-[10px] bg-red-500/10 text-red-400 font-bold px-2.5 py-1 rounded-lg border border-red-500/20 uppercase tracking-wider">
+          Studio Canvas Engine
         </span>
       </div>
 
-      {/* Options */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-        <div className="space-y-1.5">
-          <label className="text-slate-400 font-medium">Video Quality / Aspect Ratio:</label>
-          <select
-            value={videoQuality}
-            onChange={(e) => setVideoQuality(e.target.value as any)}
-            disabled={isRendering}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-red-500"
-          >
-            <option value="720p">720x1280 Vertical Short (Fast HD)</option>
-            <option value="1080p">1080x1920 Vertical Short (Full HD)</option>
-          </select>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Controls & Status Column */}
+        <div className="lg:col-span-7 space-y-5">
+          {/* Options */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div className="space-y-1.5">
+              <label className="text-slate-300 font-semibold">Video Kalitesi & Çözünürlük:</label>
+              <select
+                value={videoQuality}
+                onChange={(e) => setVideoQuality(e.target.value as any)}
+                disabled={isRendering}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-red-500"
+              >
+                <option value="720p">720x1280 Dikey Short (Hızlı HD)</option>
+                <option value="1080p">1080x1920 Dikey Short (Full HD Ultra)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-slate-300 font-semibold">Altyazı Görünümü:</label>
+              <button
+                type="button"
+                onClick={() => setIncludeSubtitles(!includeSubtitles)}
+                disabled={isRendering}
+                className={`w-full px-3 py-2.5 rounded-xl border text-left font-semibold flex items-center justify-between transition cursor-pointer ${
+                  includeSubtitles
+                    ? 'bg-red-950/40 border-red-500/50 text-red-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                <span>{includeSubtitles ? '✓ Vurgulu Altyazılar Dahil' : '✕ Altyazısız'}</span>
+                <Sliders className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Rendering Status Progress Bar */}
+          {isRendering && (
+            <div className="space-y-3 bg-slate-900/90 p-5 rounded-xl border border-slate-800 shadow-xl">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-200 font-bold flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 animate-spin text-red-500" />
+                  {renderStatusText}
+                </span>
+                <span className="font-extrabold text-red-400 text-sm">{progress}%</span>
+              </div>
+
+              <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                <div
+                  className="h-full bg-gradient-to-r from-red-600 via-amber-500 to-emerald-400 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-400 italic text-center">
+                Canlı seslendirme, görseller ve altyazılar senkronize edilerek işleniyor...
+              </p>
+            </div>
+          )}
+
+          {/* Rendered Video Download Box */}
+          {renderedVideoUrl && !isRendering && (
+            <div className="p-5 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-4 shadow-lg">
+              <div className="flex items-center space-x-2 text-emerald-400 font-bold text-sm">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <span>Video İşleme Tamamlandı! HD Dosyanız Hazır.</span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <a
+                  href={renderedVideoUrl}
+                  download={`yt_short_${topic.substring(0, 15).replace(/\s+/g, '_')}.webm`}
+                  className="w-full px-5 py-3.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20 transition cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Videoyu İndir (.WebM / MP4)</span>
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Action Button */}
+          {!isRendering && (
+            <button
+              onClick={startVideoRender}
+              className="w-full py-4 bg-gradient-to-r from-red-600 via-red-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-extrabold text-sm rounded-xl shadow-xl shadow-red-500/25 flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <Video className="w-5 h-5" />
+              <span>{renderedVideoUrl ? 'Videoyu Yeniden Oluştur (Re-render)' : 'Videoyu Render Et ve Oluştur'}</span>
+            </button>
+          )}
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-slate-400 font-medium">Subtitles Overlay:</label>
-          <button
-            type="button"
-            onClick={() => setIncludeSubtitles(!includeSubtitles)}
-            disabled={isRendering}
-            className={`w-full px-3 py-2 rounded-xl border text-left font-semibold flex items-center justify-between transition ${
-              includeSubtitles
-                ? 'bg-red-950/40 border-red-500/50 text-red-300'
-                : 'bg-slate-900 border-slate-800 text-slate-400'
-            }`}
-          >
-            <span>{includeSubtitles ? '✓ Burned-in Subtitles Included' : '✕ No Subtitles'}</span>
-            <Sliders className="w-3.5 h-3.5" />
-          </button>
+        {/* Right Live Preview / Canvas Column */}
+        <div className="lg:col-span-5 flex flex-col items-center justify-center bg-slate-900/60 p-4 rounded-xl border border-slate-800 min-h-[360px]">
+          <h5 className="text-xs font-bold text-slate-400 mb-3 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Canlı Render Tuvali (Live 9:16 Canvas)</span>
+          </h5>
+
+          {renderedVideoUrl && !isRendering ? (
+            <div className="flex flex-col items-center space-y-3">
+              <video
+                src={renderedVideoUrl}
+                controls
+                autoPlay
+                className="max-h-[380px] aspect-[9/16] rounded-2xl border-2 border-emerald-500/50 shadow-2xl bg-black object-contain"
+              />
+              <span className="text-[11px] text-emerald-400 font-semibold">✓ İşlenmiş Tam Video Önizleme</span>
+            </div>
+          ) : (
+            <div className="relative flex flex-col items-center justify-center">
+              <canvas
+                ref={canvasRef}
+                className={`max-h-[380px] aspect-[9/16] rounded-2xl border-2 border-red-500/30 shadow-2xl bg-black object-contain ${
+                  isRendering ? 'block' : 'hidden'
+                }`}
+              />
+              {!isRendering && (
+                <div className="flex flex-col items-center justify-center p-8 text-center space-y-3 text-slate-500">
+                  <Film className="w-12 h-12 text-slate-700 stroke-[1.5]" />
+                  <p className="text-xs font-medium text-slate-400">
+                    "Videoyu Render Et" butonuna bastığınızda video burada canlı olarak oluşturulacaktır.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Hidden Canvas used for rendering */}
-      <canvas ref={canvasRef} className="hidden" />
-
-      {/* Rendering Status Progress Bar */}
-      {isRendering && (
-        <div className="space-y-2 bg-slate-900/80 p-4 rounded-xl border border-slate-800">
-          <div className="flex justify-between items-center text-xs">
-            <span className="text-slate-300 font-medium flex items-center gap-1.5">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-500" />
-              {renderStatusText}
-            </span>
-            <span className="font-bold text-red-400">{progress}%</span>
-          </div>
-
-          <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-            <div
-              className="h-full bg-gradient-to-r from-red-600 to-amber-500 transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Rendered Video Preview & Download */}
-      {renderedVideoUrl && !isRendering && (
-        <div className="p-4 bg-emerald-950/30 border border-emerald-500/30 rounded-xl space-y-3">
-          <div className="flex items-center space-x-2 text-emerald-400 font-bold text-xs">
-            <CheckCircle className="w-4 h-4" />
-            <span>Shorts Video Rendered Successfully!</span>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <a
-              href={renderedVideoUrl}
-              download={`yt_short_${topic.substring(0, 15).replace(/\s+/g, '_')}.webm`}
-              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition"
-            >
-              <Download className="w-4 h-4" />
-              <span>Download MP4 / WebM Video File</span>
-            </a>
-          </div>
-        </div>
-      )}
-
-      {/* Action Button */}
-      {!isRendering && (
-        <button
-          onClick={startVideoRender}
-          className="w-full py-3 bg-gradient-to-r from-red-600 via-red-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-bold text-xs rounded-xl shadow-lg shadow-red-500/20 flex items-center justify-center gap-2 transition cursor-pointer"
-        >
-          <Video className="w-4 h-4" />
-          <span>{renderedVideoUrl ? 'Re-render Video' : 'Render & Generate Final Video File'}</span>
-        </button>
-      )}
     </div>
   );
 };

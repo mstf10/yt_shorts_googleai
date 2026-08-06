@@ -43,27 +43,27 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
           
           {/* Logo & Brand */}
-          <div className="flex items-center justify-between w-full md:w-auto">
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 rounded-xl shadow-lg shadow-red-500/20 text-white">
-                <Youtube className="w-6 h-6" />
+          <div className="flex items-center justify-between w-full md:w-auto shrink-0">
+            <div className="flex items-center space-x-2.5">
+              <div className="p-2 sm:p-2.5 bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 rounded-xl shadow-lg shadow-red-500/20 text-white shrink-0">
+                <Youtube className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent flex items-center gap-2">
-                  YT Shorts AI <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 font-medium">Gemini 3.6</span>
+                <h1 className="text-base sm:text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent flex items-center gap-1.5 leading-tight">
+                  YT Shorts AI <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 font-medium">Gemini 3.6</span>
                 </h1>
-                <p className="text-xs text-slate-400">Automated Video Script, Voiceover & Stock Video Studio</p>
+                <p className="text-[11px] sm:text-xs text-slate-400">Yapay Zeka Shorts & Voicover Stüdyosu</p>
               </div>
             </div>
 
             {/* Mobile Key Status Button */}
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="md:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700"
-              title="API Settings"
+              className="md:hidden min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95 transition"
+              title="API Ayarları"
             >
               <Key className="w-4 h-4" />
             </button>
@@ -71,22 +71,22 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Search / Topic Generator Input Bar */}
           <form onSubmit={handleSubmit} className="w-full md:flex-1 max-w-2xl">
-            <div className="relative flex items-center">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-950 p-1.5 sm:p-1 rounded-2xl border border-slate-700/80 shadow-inner">
               <input
                 type="text"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                placeholder="Enter topic (e.g. '5 Secrets of Ancient Pyramids', 'Black Hole Physics')..."
-                className="w-full pl-4 pr-32 py-2.5 bg-slate-950 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 text-sm transition"
+                placeholder="Konu girin (Örn: 'Kara delikler hakkındaki 5 bilimsel gerçek')..."
+                className="w-full px-3.5 py-2.5 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none text-xs sm:text-sm"
               />
 
-              <div className="absolute right-1.5 flex items-center space-x-1">
+              <div className="flex items-center gap-1.5 justify-end shrink-0 px-1 pb-1 sm:pb-0">
                 {/* Language selection dropdown */}
                 <select
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-red-500 cursor-pointer"
-                  title="Script Language"
+                  className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-red-500 cursor-pointer min-h-[38px]"
+                  title="Senaryo Dili"
                 >
                   <option value="tr">TR 🇹🇷</option>
                   <option value="en">EN 🇺🇸</option>
@@ -98,14 +98,14 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   type="submit"
                   disabled={isGenerating || !topic.trim()}
-                  className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:opacity-50 text-white font-medium text-xs rounded-lg shadow-md transition cursor-pointer"
+                  className="flex items-center justify-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition active:scale-95 cursor-pointer min-h-[38px] shrink-0"
                 >
                   {isGenerating ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
-                    <Wand2 className="w-3.5 h-3.5" />
+                    <Wand2 className="w-4 h-4" />
                   )}
-                  <span>{isGenerating ? 'Building...' : 'Generate'}</span>
+                  <span>{isGenerating ? 'Oluşturuluyor...' : 'Oluştur'}</span>
                 </button>
               </div>
             </div>

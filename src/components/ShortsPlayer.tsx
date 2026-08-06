@@ -132,9 +132,9 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center w-full max-w-sm mx-auto">
       {/* 9:16 Portrait Container Frame */}
-      <div className="relative w-[310px] sm:w-[350px] h-[580px] sm:h-[630px] bg-black rounded-[36px] overflow-hidden border-4 border-slate-800 shadow-2xl shadow-red-500/10 flex flex-col justify-between group select-none">
+      <div className="relative w-full max-w-[310px] sm:max-w-[350px] aspect-[9/16] max-h-[75vh] sm:max-h-[630px] bg-black rounded-[32px] sm:rounded-[36px] overflow-hidden border-4 border-slate-800 shadow-2xl shadow-red-500/10 flex flex-col justify-between group select-none">
         
         {/* Top Progress / Scene Indicator Bar */}
         <div className="absolute top-3 left-3 right-3 z-20 flex space-x-1.5">
@@ -142,10 +142,10 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
             <div
               key={idx}
               onClick={() => setActiveSceneIndex(idx)}
-              className="h-1 flex-1 rounded-full cursor-pointer overflow-hidden bg-white/30 backdrop-blur-sm"
+              className="h-1 flex-1 rounded-full cursor-pointer overflow-hidden bg-white/30 backdrop-blur-sm min-h-[12px] flex items-center"
             >
               <div
-                className={`h-full bg-red-500 transition-all duration-300 ${
+                className={`h-1 bg-red-500 transition-all duration-300 ${
                   idx === activeSceneIndex
                     ? 'w-full'
                     : idx < activeSceneIndex
@@ -159,7 +159,7 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
 
         {/* Top Header Overlay */}
         <div className="absolute top-6 left-4 right-4 z-20 flex items-center justify-between text-white text-xs font-semibold drop-shadow-md">
-          <span className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+          <span className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[11px]">
             <Sparkles className="w-3 h-3 text-red-400" /> Shorts AI
           </span>
           <span className="bg-red-600/80 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
@@ -180,10 +180,10 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-950 flex flex-col items-center justify-center p-6 text-center">
-              <div className="w-16 h-16 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 mb-3 animate-pulse">
-                <Sparkles className="w-8 h-8" />
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 mb-3 animate-pulse">
+                <Sparkles className="w-7 h-7 sm:w-8 sm:h-8" />
               </div>
-              <p className="text-xs text-slate-300 font-medium">Loading Stock Scene Video...</p>
+              <p className="text-xs text-slate-300 font-medium">Stok Video Yükleniyor...</p>
             </div>
           )}
 
@@ -194,56 +194,56 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
         {/* Center Big Play/Pause Touch Overlay */}
         <button
           onClick={togglePlay}
-          className="absolute inset-0 z-10 flex items-center justify-center text-white/80 hover:text-white transition"
+          className="absolute inset-0 z-10 flex items-center justify-center text-white/80 hover:text-white transition cursor-pointer"
         >
           {!isPlaying && (
-            <div className="p-4 bg-black/50 backdrop-blur-md rounded-full border border-white/20 shadow-xl transform scale-110">
-              <Play className="w-10 h-10 fill-white translate-x-0.5" />
+            <div className="p-3.5 sm:p-4 bg-black/50 backdrop-blur-md rounded-full border border-white/20 shadow-xl transform scale-105 active:scale-95 transition">
+              <Play className="w-8 h-8 sm:w-10 sm:h-10 fill-white translate-x-0.5" />
             </div>
           )}
         </button>
 
         {/* Right Action Sidebar (YouTube Shorts Style) */}
-        <div className="absolute right-3 bottom-20 z-20 flex flex-col items-center space-y-4 text-white">
+        <div className="absolute right-2.5 bottom-16 sm:bottom-20 z-20 flex flex-col items-center space-y-3.5 sm:space-y-4 text-white">
           <button
             onClick={toggleLike}
-            className="flex flex-col items-center space-y-1 group"
+            className="flex flex-col items-center space-y-1 group cursor-pointer"
           >
-            <div className={`p-2.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 group-hover:scale-110 transition ${liked ? 'text-red-500 bg-red-500/20' : 'text-white'}`}>
-              <Heart className={`w-5 h-5 ${liked ? 'fill-red-500' : ''}`} />
+            <div className={`p-2 sm:p-2.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 group-hover:scale-110 active:scale-95 transition ${liked ? 'text-red-500 bg-red-500/20' : 'text-white'}`}>
+              <Heart className={`w-4 h-4 sm:w-5 sm:h-5 ${liked ? 'fill-red-500' : ''}`} />
             </div>
             <span className="text-[10px] font-bold drop-shadow">
               {(likeCount / 1000).toFixed(1)}k
             </span>
           </button>
 
-          <button className="flex flex-col items-center space-y-1 group">
-            <div className="p-2.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 group-hover:scale-110 transition text-white">
-              <MessageCircle className="w-5 h-5" />
+          <button className="flex flex-col items-center space-y-1 group cursor-pointer">
+            <div className="p-2 sm:p-2.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 group-hover:scale-110 active:scale-95 transition text-white">
+              <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <span className="text-[10px] font-bold drop-shadow">842</span>
           </button>
 
-          <button className="flex flex-col items-center space-y-1 group">
-            <div className="p-2.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 group-hover:scale-110 transition text-white">
-              <Share2 className="w-5 h-5" />
+          <button className="flex flex-col items-center space-y-1 group cursor-pointer">
+            <div className="p-2 sm:p-2.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 group-hover:scale-110 active:scale-95 transition text-white">
+              <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[10px] font-bold drop-shadow">Share</span>
+            <span className="text-[10px] font-bold drop-shadow">Paylaş</span>
           </button>
 
           {/* Audio Disc Spinner */}
-          <div className="pt-2">
-            <div className={`p-2 rounded-full bg-slate-900 border-2 border-slate-700 shadow-md ${isPlaying ? 'animate-spin' : ''}`}>
-              <Disc className="w-5 h-5 text-red-500" />
+          <div className="pt-1">
+            <div className={`p-1.5 sm:p-2 rounded-full bg-slate-900 border-2 border-slate-700 shadow-md ${isPlaying ? 'animate-spin' : ''}`}>
+              <Disc className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
             </div>
           </div>
         </div>
 
         {/* Bottom Subtitles & Channel Overlay */}
-        <div className="absolute bottom-4 left-4 right-14 z-20 space-y-3 text-white pointer-events-none">
+        <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 right-12 sm:right-14 z-20 space-y-2.5 text-white pointer-events-none">
           
           {/* Karaoke Subtitles Banner */}
-          <div className="bg-black/60 backdrop-blur-md border border-white/10 p-3 rounded-2xl shadow-xl">
+          <div className="bg-black/70 backdrop-blur-md border border-white/10 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-xl">
             <p
               className="text-xs sm:text-sm font-black leading-snug tracking-wide text-center"
               lang={isTurkish ? 'tr' : 'en'}
@@ -272,46 +272,46 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
 
           {/* Channel Name & Sound Info */}
           <div className="flex items-center space-x-2">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center font-bold text-xs text-white shadow-md border border-white/20">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center font-bold text-[10px] sm:text-xs text-white shadow-md border border-white/20">
               YT
             </div>
-            <span className="text-xs font-bold drop-shadow">@AIGenerator</span>
-            <button className="bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow">
-              Subscribe
+            <span className="text-[11px] sm:text-xs font-bold drop-shadow">@AIGenerator</span>
+            <button className="bg-red-600 hover:bg-red-500 text-white px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider shadow pointer-events-auto">
+              Abone Ol
             </button>
           </div>
 
-          <p className="text-[11px] text-slate-200 font-medium truncate drop-shadow flex items-center gap-1">
+          <p className="text-[10px] sm:text-[11px] text-slate-200 font-medium truncate drop-shadow flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
-            <span>Original Sound - {selectedVoice} AI Voice</span>
+            <span>Orijinal Ses - {selectedVoice} AI Voice</span>
           </p>
         </div>
       </div>
 
       {/* External Player Control Toolbar */}
-      <div className="mt-4 flex items-center space-x-3 bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-2xl shadow-lg">
+      <div className="mt-3 sm:mt-4 flex items-center justify-center space-x-2 sm:space-x-3 bg-slate-900 border border-slate-800 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl shadow-lg w-full max-w-[350px]">
         <button
           onClick={() => setActiveSceneIndex((prev) => Math.max(0, prev - 1))}
           disabled={activeSceneIndex === 0}
-          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 transition"
-          title="Previous Scene"
+          className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 active:scale-95 transition min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+          title="Önceki Sahne"
         >
           <SkipBack className="w-4 h-4" />
         </button>
 
         <button
           onClick={togglePlay}
-          className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-md transition"
+          className="flex-1 py-2 sm:py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs flex items-center justify-center space-x-1.5 shadow-md active:scale-95 transition cursor-pointer min-h-[40px]"
         >
           {isPlaying ? (
             <>
               <Pause className="w-4 h-4 fill-white" />
-              <span>Pause</span>
+              <span>Durdur</span>
             </>
           ) : (
             <>
               <Play className="w-4 h-4 fill-white" />
-              <span>Play Short</span>
+              <span>Oynat</span>
             </>
           )}
         </button>
@@ -319,8 +319,8 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
         <button
           onClick={() => setActiveSceneIndex((prev) => Math.min(scenes.length - 1, prev + 1))}
           disabled={activeSceneIndex === scenes.length - 1}
-          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 transition"
-          title="Next Scene"
+          className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 active:scale-95 transition min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+          title="Sonraki Sahne"
         >
           <SkipForward className="w-4 h-4" />
         </button>
@@ -329,12 +329,12 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
 
         <button
           onClick={() => setIsMuted(!isMuted)}
-          className={`p-2 rounded-xl border transition ${
+          className={`p-2 sm:p-2.5 rounded-xl border active:scale-95 transition min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer ${
             isMuted
               ? 'bg-red-950/60 border-red-500/50 text-red-400'
               : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
           }`}
-          title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+          title={isMuted ? 'Sesi Aç' : 'Sesi Kapat'}
         >
           {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </button>

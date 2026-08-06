@@ -132,8 +132,10 @@ export function App() {
     setScenes(updated.map((s, idx) => ({ ...s, scene: idx + 1 })));
   };
 
+  const [mobileTab, setMobileTab] = useState<'editor' | 'player'>('editor');
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-red-500 selection:text-white">
       <Header
         topic={topic}
         setTopic={setTopic}
@@ -149,10 +151,38 @@ export function App() {
         setCustomPexelsKey={handleSetCustomPexelsKey}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {/* Mobile Tab Switcher Bar (Visible on mobile < lg) */}
+      <div className="lg:hidden sticky top-[69px] z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800/80 px-4 py-2">
+        <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <button
+            onClick={() => setMobileTab('editor')}
+            className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+              mobileTab === 'editor'
+                ? 'bg-red-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Senaryo ve Sahneler</span>
+          </button>
+          <button
+            onClick={() => setMobileTab('player')}
+            className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+              mobileTab === 'player'
+                ? 'bg-red-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Film className="w-4 h-4" />
+            <span>Canlı Shorts & Export</span>
+          </button>
+        </div>
+      </div>
+
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* Left Column: Storyboard & Script Editor (7 cols on lg) */}
-        <section className="lg:col-span-7 space-y-4">
+        {/* Left Column: Storyboard & Script Editor */}
+        <section className={`lg:col-span-7 space-y-4 ${mobileTab === 'editor' ? 'block' : 'hidden lg:block'}`}>
           <StoryboardEditor
             scenes={scenes}
             setScenes={setScenes}
@@ -168,21 +198,21 @@ export function App() {
           />
         </section>
 
-        {/* Right Column: 9:16 Shorts Player & Actions (5 cols on lg) */}
-        <section className="lg:col-span-5 flex flex-col items-center space-y-6 lg:sticky lg:top-24">
+        {/* Right Column: 9:16 Shorts Player & Actions */}
+        <section className={`lg:col-span-5 flex flex-col items-center space-y-4 sm:space-y-6 lg:sticky lg:top-24 ${mobileTab === 'player' ? 'block' : 'hidden lg:block'}`}>
           
-          <div className="w-full flex items-center justify-between bg-slate-900 border border-slate-800 p-3.5 rounded-2xl shadow-lg">
+          <div className="w-full flex items-center justify-between bg-slate-900 border border-slate-800 p-3 sm:p-3.5 rounded-2xl shadow-lg">
             <div className="flex items-center space-x-2">
               <Film className="w-4 h-4 text-red-500" />
-              <span className="text-xs font-bold text-slate-200">YouTube Short Live Stage</span>
+              <span className="text-xs font-bold text-slate-200">YouTube Short Canlı Sahne</span>
             </div>
 
             <button
               onClick={() => setIsExportOpen(true)}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-red-600 via-red-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-red-500/10 transition cursor-pointer"
+              className="px-3.5 py-2 bg-gradient-to-r from-red-600 via-red-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-red-500/20 transition active:scale-95 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Videoyu Dışarı Aktar (Export)</span>
+              <span>Videoyu İndir / Export</span>
             </button>
           </div>
 
