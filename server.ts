@@ -39,54 +39,89 @@ app.get("/api/status", (req, res) => {
   });
 });
 
+function getFallbackScenes(topic: string, language: string) {
+  const isTr = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/.test(topic);
+
+  if (isTr) {
+    return [
+      {
+        scene: 1,
+        text: `Hoş geldiniz! İşte ${topic} hakkında muhtemelen daha önce duymadığınız büyüleyici gerçekler.`,
+        visual_query: `${topic} mysterious epic cinematic portrait`,
+      },
+      {
+        scene: 2,
+        text: `Birincisi: Bilim insanları ve uzmanlar bu konuda son derece şaşırtıcı keşifler yaptı.`,
+        visual_query: `${topic} research technology motion`,
+      },
+      {
+        scene: 3,
+        text: `İkincisi: Bu süreç, doğanın ve teknolojinin sınırlarını zorlayan inanılmaz bir dengeye sahip.`,
+        visual_query: `abstract cosmic particle light motion`,
+      },
+      {
+        scene: 4,
+        text: `Üçüncüsü: Görsel efektler ve yeni nesil araştırmalar bu konudaki tüm ezberleri bozuyor.`,
+        visual_query: `futuristic digital neon technology portrait`,
+      },
+      {
+        scene: 5,
+        text: `Siz bu konuda ne düşünüyorsunuz? Kanala abone olmayı ve yorum yapmayı unutmayın!`,
+        visual_query: `neon subscribe digital motion particle`,
+      },
+    ];
+  }
+
+  return [
+    {
+      scene: 1,
+      text: `Welcome! Here are fascinating facts about: ${topic} that you probably didn't know.`,
+      visual_query: `${topic} mysterious epic background`,
+    },
+    {
+      scene: 2,
+      text: "Fact 1: Researchers have uncovered mind-blowing anomalies that challenge traditional theories.",
+      visual_query: `${topic} research technology motion`,
+    },
+    {
+      scene: 3,
+      text: "Fact 2: The sheer force and mechanics involved can distort our standard understanding of physics.",
+      visual_query: "abstract geometric laser technology light motion",
+    },
+    {
+      scene: 4,
+      text: "Fact 3: High definition captures show details never before witnessed in full clarity.",
+      visual_query: "futuristic digital technology 4k portrait",
+    },
+    {
+      scene: 5,
+      text: "Subscribe and comment below: What topic should we explore next?",
+      visual_query: "futuristic digital neon glow particle motion",
+    },
+  ];
+}
+
 // API: Generate YouTube Shorts Script using Gemini
 app.post("/api/generate-script", async (req, res) => {
+  const { topic, language = "tr", apiKey } = req.body;
+
+  if (!topic || typeof topic !== "string") {
+    return res.status(400).json({ error: "Topic is required" });
+  }
+
+  const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY;
+
+  if (!effectiveApiKey) {
+    console.warn("GEMINI_API_KEY is missing. Returning fallback storyboard script.");
+    return res.json({
+      topic,
+      language,
+      scenes: getFallbackScenes(topic, language),
+      fallback: true,
+    });
+  }
+
   try {
-    const { topic, language = "tr", apiKey } = req.body;
-
-    if (!topic || typeof topic !== "string") {
-      return res.status(400).json({ error: "Topic is required" });
-    }
-
-    const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY;
-
-    if (!effectiveApiKey) {
-      // Return smart fallback script if key is missing
-      console.warn("GEMINI_API_KEY is missing. Generating fallback storyboard script.");
-      return res.json({
-        topic,
-        language,
-        scenes: [
-          {
-            scene: 1,
-            text: `Welcome! Here are 5 fascinating facts about: ${topic}.`,
-            visual_query: `${topic} mysterious epic background`,
-          },
-          {
-            scene: 2,
-            text: "Fact 1: Scientists discovered incredible anomalies that challenge everything we knew.",
-            visual_query: "space nebula cosmic particle motion portrait",
-          },
-          {
-            scene: 3,
-            text: "Fact 2: The sheer force and gravity involved can distort light and time itself.",
-            visual_query: "abstract geometric laser technology light motion",
-          },
-          {
-            scene: 4,
-            text: "Fact 3: Recent space telescopes captured breathtaking footage never seen before.",
-            visual_query: "telescope astronomy galaxy stars deep space",
-          },
-          {
-            scene: 5,
-            text: "Subscribe and comment below: What topic should we explore next?",
-            visual_query: "futuristic digital neon glow particle motion",
-          },
-        ],
-        fallback: true,
-      });
-    }
-
     const ai = new GoogleGenAI({
       apiKey: effectiveApiKey,
       httpOptions: {
@@ -126,7 +161,6 @@ JSON Format required:
 
 Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible.`;
 
-    // Try gemini-3.6-flash first, fallback to gemini-flash-latest if needed
     let responseText = "";
     try {
       const response = await ai.models.generateContent({
@@ -135,12 +169,14 @@ Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible
       });
       responseText = response.text || "";
     } catch (modelErr: any) {
-      console.warn("gemini-3.6-flash failed, falling back to gemini-flash-latest:", modelErr?.message || modelErr);
-      const fallbackResponse = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: prompt,
+      console.log("gemini-3.6-flash notice:", modelErr?.status || modelErr?.message || "Using smart storyboard fallback");
+      return res.json({
+        topic,
+        language,
+        scenes: getFallbackScenes(topic, language),
+        fallback: true,
+        notice: "Gemini API kotası veya yanıt süresi nedeniyle akıllı senaryo motoru kullanıldı.",
       });
-      responseText = fallbackResponse.text || "";
     }
 
     const parsedScenes = parseGeminiJson(responseText);
@@ -160,10 +196,14 @@ Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible
       throw new Error("Invalid output format from Gemini");
     }
   } catch (error: any) {
-    console.error("Error generating script with Gemini:", error?.message || error);
-    res.status(500).json({
-      error: "Failed to generate script with Gemini",
-      details: error?.message || "Unknown error",
+    console.log("Script generation fallback notice:", error?.message || error);
+    // Graceful recovery for rate limits (429), quota limits or missing API permissions
+    return res.json({
+      topic,
+      language,
+      scenes: getFallbackScenes(topic, language),
+      fallback: true,
+      notice: "Gemini API kotası veya hatası nedeniyle otomatik akıllı senaryo şablonu kullanıldı.",
     });
   }
 });
