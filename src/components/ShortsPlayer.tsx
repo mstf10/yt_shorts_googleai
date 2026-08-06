@@ -23,6 +23,7 @@ interface ShortsPlayerProps {
   selectedVoice: string;
   speechRate: number;
   topic: string;
+  language?: string;
 }
 
 export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
@@ -32,6 +33,7 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
   selectedVoice,
   speechRate,
   topic,
+  language = 'tr',
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -41,11 +43,13 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const currentScene = scenes[activeSceneIndex] || scenes[0];
-  const sceneWords = currentScene ? currentScene.text.split(' ') : [];
+  const currentText = currentScene?.text || '';
+  const isTurkish = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/.test(currentText);
+  const sceneWords = currentText.trim() ? currentText.trim().split(/\s+/) : [];
 
   // Web Speech Synthesis handler for realistic voiceover audio playback
   useEffect(() => {
-    if (!isPlaying || !currentScene || isMuted) {
+    if (!isPlaying || !currentScene || isMuted || !currentText) {
       window.speechSynthesis.cancel();
       setActiveWordIndex(-1);
       return;
@@ -53,18 +57,24 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
 
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(currentScene.text);
+    const utterance = new SpeechSynthesisUtterance(currentText);
     utterance.rate = speechRate;
+    utterance.lang = isTurkish ? 'tr-TR' : language === 'es' ? 'es-ES' : language === 'de' ? 'de-DE' : language === 'fr' ? 'fr-FR' : 'en-US';
 
     // Pick voice if matches
     const voices = window.speechSynthesis.getVoices();
     if (voices.length > 0) {
-      const match = voices.find(
-        (v) =>
-          v.name.toLowerCase().includes(selectedVoice.toLowerCase()) ||
-          v.lang.startsWith('tr') ||
-          v.lang.startsWith('en')
-      );
+      let match = null;
+      if (isTurkish) {
+        match = voices.find((v) => v.lang.startsWith('tr') || v.name.toLowerCase().includes('turkish'));
+      }
+      if (!match) {
+        match = voices.find(
+          (v) =>
+            v.name.toLowerCase().includes(selectedVoice.toLowerCase()) ||
+            v.lang.startsWith(language)
+        );
+      }
       if (match) utterance.voice = match;
     }
 
@@ -99,7 +109,7 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
     return () => {
       window.speechSynthesis.cancel();
     };
-  }, [activeSceneIndex, isPlaying, isMuted, selectedVoice, speechRate, currentScene?.text]);
+  }, [activeSceneIndex, isPlaying, isMuted, selectedVoice, speechRate, currentText, isTurkish, language]);
 
   // Sync video play/pause
   useEffect(() => {
@@ -234,9 +244,16 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
           
           {/* Karaoke Subtitles Banner */}
           <div className="bg-black/60 backdrop-blur-md border border-white/10 p-3 rounded-2xl shadow-xl">
-            <p className="text-xs sm:text-sm font-black leading-snug tracking-wide text-center uppercase">
+            <p
+              className="text-xs sm:text-sm font-black leading-snug tracking-wide text-center"
+              lang={isTurkish ? 'tr' : 'en'}
+            >
               {sceneWords.map((word, wIdx) => {
                 const isHighlight = wIdx === activeWordIndex;
+                const formattedWord = isTurkish
+                  ? word.toLocaleUpperCase('tr-TR')
+                  : word.toLocaleUpperCase('en-US');
+
                 return (
                   <span
                     key={wIdx}
@@ -246,7 +263,7 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
                         : 'text-white drop-shadow-md'
                     }`}
                   >
-                    {word}{' '}
+                    {formattedWord}{' '}
                   </span>
                 );
               })}

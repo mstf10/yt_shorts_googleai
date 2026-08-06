@@ -160,10 +160,10 @@ export function App() {
 
             <button
               onClick={() => setIsExportOpen(true)}
-              className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 shadow transition"
+              className="px-3.5 py-1.5 bg-gradient-to-r from-red-600 via-red-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-red-500/10 transition cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export Assets</span>
+              <span>Videoyu Dışarı Aktar (Export)</span>
             </button>
           </div>
 
@@ -174,13 +174,14 @@ export function App() {
             selectedVoice={selectedVoice}
             speechRate={speechRate}
             topic={topic}
+            language={language}
           />
         </section>
       </main>
 
       {/* Footer info bar */}
       <footer className="border-t border-slate-900 py-4 bg-slate-950 text-center text-xs text-slate-500">
-        <p>YT Shorts AI Generator • Powered by Google Gemini 2.5 Flash & Pexels Video Engine</p>
+        <p>YT Shorts AI Generator • Powered by Google Gemini 3.6 Flash & Pexels Video Engine</p>
       </footer>
 
       {/* Export Modal */}
@@ -188,6 +189,8 @@ export function App() {
         topic={topic}
         scenes={scenes}
         language={language}
+        selectedVoice={selectedVoice}
+        speechRate={speechRate}
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
       />

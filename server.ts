@@ -87,7 +87,14 @@ app.post("/api/generate-script", async (req, res) => {
       });
     }
 
-    const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
+    const ai = new GoogleGenAI({
+      apiKey: effectiveApiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
 
     const langInstruction =
       language === "tr"
@@ -119,9 +126,9 @@ JSON Format required:
 
 Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible.`;
 
-    // Use gemini-2.5-flash as default fast model
+    // Use gemini-3.6-flash model
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
     });
 

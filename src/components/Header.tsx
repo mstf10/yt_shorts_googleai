@@ -53,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div>
                 <h1 className="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent flex items-center gap-2">
-                  YT Shorts AI <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 font-medium">Gemini 2.5</span>
+                  YT Shorts AI <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 font-medium">Gemini 3.6</span>
                 </h1>
                 <p className="text-xs text-slate-400">Automated Video Script, Voiceover & Stock Video Studio</p>
               </div>
