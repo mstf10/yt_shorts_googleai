@@ -185,11 +185,14 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
             <p className="text-slate-400">
-              Provide custom keys if you wish to override server environment variables. If left blank, the server uses default AI Studio configuration and stock video assets.
+              Girilen API key'ler tarayıcınıza (localStorage) otomatik olarak kaydedilir. Sunucu varsayılanlarını değiştirmek için kendi key'lerinizi girebilirsiniz.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Gemini API Key</label>
+                <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
+                  <span>Gemini API Key</span>
+                  {customGeminiKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Kaydedildi (Saved)</span>}
+                </label>
                 <input
                   type="password"
                   value={customGeminiKey}
@@ -199,7 +202,10 @@ export const Header: React.FC<HeaderProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Pexels API Key</label>
+                <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
+                  <span>Pexels API Key</span>
+                  {customPexelsKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Kaydedildi (Saved)</span>}
+                </label>
                 <input
                   type="password"
                   value={customPexelsKey}

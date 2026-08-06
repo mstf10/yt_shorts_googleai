@@ -49,28 +49,44 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       return;
     }
 
-    // Prepare audio destination stream for recording speech
-    const stream = canvas.captureStream(30);
+    // Initialize Web Audio API to record voiceover audio stream
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const audioCtx = new AudioContextClass();
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+    const audioDest = audioCtx.createMediaStreamDestination();
+
+    // Prepare combined canvas video + Web Audio destination audio stream
+    const canvasStream = canvas.captureStream(30);
+    const videoTrack = canvasStream.getVideoTracks()[0];
+    const audioTrack = audioDest.stream.getAudioTracks()[0];
+
+    const combinedStream = new MediaStream([
+      videoTrack,
+      ...(audioTrack ? [audioTrack] : []),
+    ]);
+
     let mediaRecorder: MediaRecorder | null = null;
     const chunks: Blob[] = [];
 
     const supportedTypes = [
-      'video/webm;codecs=vp9',
-      'video/webm;codecs=vp8',
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
       'video/webm',
       'video/mp4',
     ];
     let selectedMime = supportedTypes.find((t) => MediaRecorder.isTypeSupported(t)) || '';
 
     try {
-      mediaRecorder = new MediaRecorder(stream, selectedMime ? { mimeType: selectedMime } : undefined);
+      mediaRecorder = new MediaRecorder(combinedStream, selectedMime ? { mimeType: selectedMime } : undefined);
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
       };
       mediaRecorder.start();
     } catch (e) {
-      console.warn('MediaRecorder error, falling back to default options:', e);
-      mediaRecorder = new MediaRecorder(stream);
+      console.warn('MediaRecorder error, falling back to default stream options:', e);
+      mediaRecorder = new MediaRecorder(combinedStream);
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
       };
@@ -107,44 +123,69 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
         sceneVideo.play().catch(() => {});
       }
 
-      setRenderStatusText(`Rendering Scene ${i + 1} / ${scenes.length}...`);
+      setRenderStatusText(`Rendering Scene ${i + 1} / ${scenes.length} (Voiceover & Graphics)...`);
 
-      // Speech synthesis for current scene voiceover
       const currentText = scene.text || '';
       let speechEnded = false;
       let activeCharIndex = 0;
 
-      if (window.speechSynthesis && currentText) {
+      // Fetch /api/tts audio for this scene to pipe into AudioContext stream
+      let ttsAudioElement: HTMLAudioElement | null = null;
+      let ttsSourceNode: MediaElementAudioSourceNode | null = null;
+
+      if (currentText) {
+        try {
+          const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${isTurkish ? 'tr' : language}`;
+          ttsAudioElement = new Audio(ttsUrl);
+          ttsAudioElement.crossOrigin = 'anonymous';
+
+          ttsSourceNode = audioCtx.createMediaElementSource(ttsAudioElement);
+          ttsSourceNode.connect(audioDest);
+          ttsSourceNode.connect(audioCtx.destination);
+
+          ttsAudioElement.ontimeupdate = () => {
+            if (ttsAudioElement && ttsAudioElement.duration > 0) {
+              const progressRatio = ttsAudioElement.currentTime / ttsAudioElement.duration;
+              activeCharIndex = Math.floor(progressRatio * currentText.length);
+            }
+          };
+
+          ttsAudioElement.onended = () => {
+            speechEnded = true;
+          };
+
+          ttsAudioElement.onerror = () => {
+            speechEnded = true;
+          };
+
+          await ttsAudioElement.play();
+        } catch (audioErr) {
+          console.warn('TTS AudioElement error, fallback to speechSynthesis:', audioErr);
+          speechEnded = false;
+        }
+      } else {
+        speechEnded = true;
+      }
+
+      // Also trigger browser SpeechSynthesis as fallback visual boundary driver
+      if (!ttsAudioElement && window.speechSynthesis && currentText) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(currentText);
         utterance.rate = speechRate;
         utterance.lang = isTurkish ? 'tr-TR' : 'en-US';
-
-        const voices = window.speechSynthesis.getVoices();
-        const match = voices.find((v) => v.lang.startsWith(isTurkish ? 'tr' : 'en'));
-        if (match) utterance.voice = match;
 
         utterance.onboundary = (evt) => {
           if (evt.name === 'word') {
             activeCharIndex = evt.charIndex;
           }
         };
-
-        utterance.onend = () => {
-          speechEnded = true;
-        };
-
-        utterance.onerror = () => {
-          speechEnded = true;
-        };
-
+        utterance.onend = () => { speechEnded = true; };
+        utterance.onerror = () => { speechEnded = true; };
         window.speechSynthesis.speak(utterance);
-      } else {
-        speechEnded = true;
       }
 
       // Minimum time per scene in milliseconds
-      const minSceneTime = Math.max(3000, currentText.length * 75);
+      const minSceneTime = Math.max(3500, currentText.length * 80);
       const startTime = Date.now();
 
       // Frame animation loop for scene duration

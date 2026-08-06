@@ -243,6 +243,38 @@ app.post("/api/fetch-pexels-video", async (req, res) => {
   }
 });
 
+// API: High Quality TTS Voiceover Audio proxy
+app.get("/api/tts", async (req, res) => {
+  try {
+    const text = String(req.query.text || "").trim();
+    const lang = String(req.query.lang || "tr").trim();
+
+    if (!text) {
+      return res.status(400).json({ error: "Text is required" });
+    }
+
+    const safeText = text.substring(0, 200);
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
+
+    const response = await fetch(ttsUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`TTS service status ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    res.set("Content-Type", "audio/mpeg");
+    res.send(Buffer.from(arrayBuffer));
+  } catch (err: any) {
+    console.error("TTS endpoint error:", err?.message || err);
+    res.status(500).json({ error: "TTS generation failed" });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

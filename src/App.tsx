@@ -14,12 +14,31 @@ export function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState('Puck');
   const [speechRate, setSpeechRate] = useState(1.0);
-  const [customGeminiKey, setCustomGeminiKey] = useState('');
-  const [customPexelsKey, setCustomPexelsKey] = useState('');
+  const [customGeminiKey, setCustomGeminiKey] = useState(() => localStorage.getItem('yt_shorts_gemini_key') || '');
+  const [customPexelsKey, setCustomPexelsKey] = useState(() => localStorage.getItem('yt_shorts_pexels_key') || '');
   const [geminiConfigured, setGeminiConfigured] = useState(false);
   const [pexelsConfigured, setPexelsConfigured] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [loadingVideoIndices, setLoadingVideoIndices] = useState<number[]>([]);
+
+  // Persist keys to localStorage
+  const handleSetCustomGeminiKey = (key: string) => {
+    setCustomGeminiKey(key);
+    if (key) {
+      localStorage.setItem('yt_shorts_gemini_key', key);
+    } else {
+      localStorage.removeItem('yt_shorts_gemini_key');
+    }
+  };
+
+  const handleSetCustomPexelsKey = (key: string) => {
+    setCustomPexelsKey(key);
+    if (key) {
+      localStorage.setItem('yt_shorts_pexels_key', key);
+    } else {
+      localStorage.removeItem('yt_shorts_pexels_key');
+    }
+  };
 
   // Check server API status on mount
   useEffect(() => {
@@ -125,9 +144,9 @@ export function App() {
         geminiConfigured={geminiConfigured}
         pexelsConfigured={pexelsConfigured}
         customGeminiKey={customGeminiKey}
-        setCustomGeminiKey={setCustomGeminiKey}
+        setCustomGeminiKey={handleSetCustomGeminiKey}
         customPexelsKey={customPexelsKey}
-        setCustomPexelsKey={setCustomPexelsKey}
+        setCustomPexelsKey={handleSetCustomPexelsKey}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
