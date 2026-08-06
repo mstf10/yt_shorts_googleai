@@ -46,28 +46,28 @@ function getFallbackScenes(topic: string, language: string) {
     return [
       {
         scene: 1,
-        text: `Hoş geldiniz! İşte ${topic} hakkında muhtemelen daha önce duymadığınız büyüleyici gerçekler.`,
+        text: `${topic} hakkında bilmeniz gereken en şaşırtıcı ve bilimsel gerçekleri inceliyoruz.`,
         visual_query: `${topic} mysterious epic cinematic portrait`,
       },
       {
         scene: 2,
-        text: `Birincisi: Bilim insanları ve uzmanlar bu konuda son derece şaşırtıcı keşifler yaptı.`,
+        text: `Yapılan son araştırmalar, bu konuda bilinen birçok kavramın düşündüğümüzden çok daha derin olduğunu gösteriyor.`,
         visual_query: `${topic} research technology motion`,
       },
       {
         scene: 3,
-        text: `İkincisi: Bu süreç, doğanın ve teknolojinin sınırlarını zorlayan inanılmaz bir dengeye sahip.`,
+        text: `Özellikle gözlemlenen detaylar ve veriler, alanındaki uzmanları bile heyecanlandırmaya devam ediyor.`,
         visual_query: `abstract cosmic particle light motion`,
       },
       {
         scene: 4,
-        text: `Üçüncüsü: Görsel efektler ve yeni nesil araştırmalar bu konudaki tüm ezberleri bozuyor.`,
+        text: `Tarihsel ve bilimsel açıdan incelendiğinde, bu durumun benzersiz bir yapıya sahip olduğu açıkça görülüyor.`,
         visual_query: `futuristic digital neon technology portrait`,
       },
       {
         scene: 5,
-        text: `Siz bu konuda ne düşünüyorsunuz? Kanala abone olmayı ve yorum yapmayı unutmayın!`,
-        visual_query: `neon subscribe digital motion particle`,
+        text: `Gelişen teknoloji ve yeni keşiflerle birlikte ${topic} hakkındaki tüm detaylar gün geçtikçe daha da netleşiyor.`,
+        visual_query: `digital futuristic cinematic light motion`,
       },
     ];
   }
@@ -75,27 +75,27 @@ function getFallbackScenes(topic: string, language: string) {
   return [
     {
       scene: 1,
-      text: `Welcome! Here are fascinating facts about: ${topic} that you probably didn't know.`,
+      text: `Exploring key scientific facts and deep insights about ${topic}.`,
       visual_query: `${topic} mysterious epic background`,
     },
     {
       scene: 2,
-      text: "Fact 1: Researchers have uncovered mind-blowing anomalies that challenge traditional theories.",
+      text: "Recent observations show key details that challenge standard assumptions in the field.",
       visual_query: `${topic} research technology motion`,
     },
     {
       scene: 3,
-      text: "Fact 2: The sheer force and mechanics involved can distort our standard understanding of physics.",
+      text: "Detailed analysis reveals intricate patterns that continue to fascinate researchers worldwide.",
       visual_query: "abstract geometric laser technology light motion",
     },
     {
       scene: 4,
-      text: "Fact 3: High definition captures show details never before witnessed in full clarity.",
+      text: "When examined historically and scientifically, its unique structure stands out remarkably.",
       visual_query: "futuristic digital technology 4k portrait",
     },
     {
       scene: 5,
-      text: "Subscribe and comment below: What topic should we explore next?",
+      text: `With advancing tools and new findings, the story of ${topic} becomes clearer every single day.`,
       visual_query: "futuristic digital neon glow particle motion",
     },
   ];
@@ -142,18 +142,22 @@ app.post("/api/generate-script", async (req, res) => {
         ? "En français"
         : "In English";
 
-    const prompt = `You are a viral YouTube Shorts script writer and creative director.
+    const prompt = `You are an expert, highly factual YouTube Shorts scriptwriter and documentarian.
 Topic: "${topic}".
 Language requirement: Generate narration script text strictly ${langInstruction}.
 
-Task: Create a highly engaging 4 to 6 scene YouTube Short storyboard.
-Each scene must be punchy, attention-grabbing, and formatted as a JSON array of objects.
+Task: Create a highly engaging, 100% factual 4 to 6 scene YouTube Short storyboard.
+
+STRICT CONTENT RULES:
+1. ACCURACY & FACTS FIRST: Every scene must deliver clear, interesting, factual information about "${topic}".
+2. NO CALLS TO ACTION: DO NOT ask viewers to like, comment, subscribe, share, or ask questions like "Sen ne düşünüyorsun?", "Siz nasıl buldunuz?", "Yorumlarda belirtin", "Kanala abone olun", "What do you think?", or "Leave a comment below".
+3. FINAL SCENE RULE: The final scene must be a strong, punchy, informative summary or fascinating concluding fact about "${topic}". Absolutely NO meta social media call-outs!
 
 JSON Format required:
 [
   {
     "scene": 1,
-    "text": "Hook line to grab viewers in the first 3 seconds in ${langInstruction}",
+    "text": "Hook line introducing the topic in ${langInstruction}",
     "visual_query": "English 2-4 keywords description for stock video search (e.g. 'cinematic black hole galaxy', 'ancient pyramid sunset')"
   },
   ...
