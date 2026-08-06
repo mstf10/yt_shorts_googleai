@@ -126,14 +126,24 @@ JSON Format required:
 
 Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible.`;
 
-    // Use gemini-3.6-flash model
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: prompt,
-    });
+    // Try gemini-3.6-flash first, fallback to gemini-flash-latest if needed
+    let responseText = "";
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: prompt,
+      });
+      responseText = response.text || "";
+    } catch (modelErr: any) {
+      console.warn("gemini-3.6-flash failed, falling back to gemini-flash-latest:", modelErr?.message || modelErr);
+      const fallbackResponse = await ai.models.generateContent({
+        model: "gemini-flash-latest",
+        contents: prompt,
+      });
+      responseText = fallbackResponse.text || "";
+    }
 
-    const outputText = response.text || "";
-    const parsedScenes = parseGeminiJson(outputText);
+    const parsedScenes = parseGeminiJson(responseText);
 
     if (Array.isArray(parsedScenes) && parsedScenes.length > 0) {
       return res.json({
