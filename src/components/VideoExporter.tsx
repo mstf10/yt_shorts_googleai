@@ -128,69 +128,81 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       const currentText = scene.text || '';
       let speechEnded = false;
       let activeCharIndex = 0;
-
-      // Fetch /api/tts audio for this scene to pipe into AudioContext stream
-      let ttsAudioElement: HTMLAudioElement | null = null;
-      let ttsSourceNode: MediaElementAudioSourceNode | null = null;
+      let audioBufferDurationMs = 0;
+      let audioStartTime = 0;
+      let sourceNode: AudioBufferSourceNode | null = null;
 
       if (currentText) {
         try {
-          const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${isTurkish ? 'tr' : language}`;
-          ttsAudioElement = new Audio(ttsUrl);
-          ttsAudioElement.crossOrigin = 'anonymous';
+          const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
+          const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${isTurkish ? 'tr' : language}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
 
-          ttsSourceNode = audioCtx.createMediaElementSource(ttsAudioElement);
-          ttsSourceNode.connect(audioDest);
-          ttsSourceNode.connect(audioCtx.destination);
+          const ttsResponse = await fetch(ttsUrl);
+          if (ttsResponse.ok) {
+            const arrayBuffer = await ttsResponse.arrayBuffer();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-          ttsAudioElement.ontimeupdate = () => {
-            if (ttsAudioElement && ttsAudioElement.duration > 0) {
-              const progressRatio = ttsAudioElement.currentTime / ttsAudioElement.duration;
-              activeCharIndex = Math.floor(progressRatio * currentText.length);
-            }
-          };
+            sourceNode = audioCtx.createBufferSource();
+            sourceNode.buffer = audioBuffer;
+            sourceNode.connect(audioDest);
+            sourceNode.connect(audioCtx.destination);
 
-          ttsAudioElement.onended = () => {
-            speechEnded = true;
-          };
+            audioBufferDurationMs = audioBuffer.duration * 1000;
+            sourceNode.onended = () => {
+              speechEnded = true;
+            };
 
-          ttsAudioElement.onerror = () => {
-            speechEnded = true;
-          };
-
-          await ttsAudioElement.play();
+            audioStartTime = Date.now();
+            sourceNode.start(0);
+          } else {
+            throw new Error(`TTS HTTP status ${ttsResponse.status}`);
+          }
         } catch (audioErr) {
-          console.warn('TTS AudioElement error, fallback to speechSynthesis:', audioErr);
+          console.warn('TTS decodeAudioData error, proceeding with fallback duration:', audioErr);
           speechEnded = false;
         }
       } else {
         speechEnded = true;
       }
 
-      // Also trigger browser SpeechSynthesis as fallback visual boundary driver
-      if (!ttsAudioElement && window.speechSynthesis && currentText) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(currentText);
-        utterance.rate = speechRate;
-        utterance.lang = isTurkish ? 'tr-TR' : 'en-US';
+      // Fallback timer or visual boundary driver if audio stream buffer wasn't loaded
+      if (!sourceNode && currentText) {
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(currentText);
+          utterance.rate = speechRate;
+          utterance.lang = isTurkish ? 'tr-TR' : 'en-US';
 
-        utterance.onboundary = (evt) => {
-          if (evt.name === 'word') {
-            activeCharIndex = evt.charIndex;
-          }
-        };
-        utterance.onend = () => { speechEnded = true; };
-        utterance.onerror = () => { speechEnded = true; };
-        window.speechSynthesis.speak(utterance);
+          utterance.onboundary = (evt) => {
+            if (evt.name === 'word') {
+              activeCharIndex = evt.charIndex;
+            }
+          };
+          utterance.onend = () => { speechEnded = true; };
+          utterance.onerror = () => { speechEnded = true; };
+          window.speechSynthesis.speak(utterance);
+        } else {
+          speechEnded = false;
+        }
       }
 
       // Minimum time per scene in milliseconds
-      const minSceneTime = Math.max(3500, currentText.length * 80);
+      const minSceneTime = Math.max(
+        audioBufferDurationMs + 400,
+        Math.max(3500, currentText.length * 85)
+      );
       const startTime = Date.now();
 
       // Frame animation loop for scene duration
       while (!speechEnded || Date.now() - startTime < minSceneTime) {
         ctx.clearRect(0, 0, width, height);
+
+        // Update activeCharIndex from audio play position if AudioBufferSource is playing
+        if (sourceNode && audioBufferDurationMs > 0) {
+          const elapsedMs = Date.now() - audioStartTime;
+          const ratio = Math.min(1, elapsedMs / audioBufferDurationMs);
+          activeCharIndex = Math.floor(ratio * currentText.length);
+        }
 
         // 1. Draw video background or gradient fallback
         if (sceneVideo && sceneVideo.readyState >= 2) {

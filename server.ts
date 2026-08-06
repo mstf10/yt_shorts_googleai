@@ -283,32 +283,86 @@ app.post("/api/fetch-pexels-video", async (req, res) => {
   }
 });
 
-// API: High Quality TTS Voiceover Audio proxy
+// API: High Quality Gemini / Multi-Engine TTS Voiceover Audio proxy
 app.get("/api/tts", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
   try {
     const text = String(req.query.text || "").trim();
     const lang = String(req.query.lang || "tr").trim();
+    const customKey = req.query.apiKey ? String(req.query.apiKey) : "";
+    const effectiveApiKey = customKey || process.env.GEMINI_API_KEY;
 
     if (!text) {
       return res.status(400).json({ error: "Text is required" });
     }
 
-    const safeText = text.substring(0, 200);
-    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
+    const safeText = text.substring(0, 300);
 
-    const response = await fetch(ttsUrl, {
+    // 1. Try Gemini Audio Generation if API key is provided
+    if (effectiveApiKey) {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey: effectiveApiKey,
+          httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+        });
+
+        const prompt = `Say the following narration text clearly in ${lang === "tr" ? "Turkish" : "English"} with a professional studio voiceover style: "${safeText}"`;
+
+        const geminiRes = await ai.models.generateContent({
+          model: "gemini-3.6-flash",
+          contents: prompt,
+          config: {
+            responseModalities: ["AUDIO"],
+          },
+        });
+
+        const audioPart = geminiRes.candidates?.[0]?.content?.parts?.find(
+          (p: any) => p.inlineData && p.inlineData.mimeType?.startsWith("audio/")
+        );
+
+        if (audioPart && audioPart.inlineData?.data) {
+          const buffer = Buffer.from(audioPart.inlineData.data, "base64");
+          res.set("Content-Type", audioPart.inlineData.mimeType || "audio/wav");
+          return res.send(buffer);
+        }
+      } catch (geminiAudioErr: any) {
+        console.log("Gemini TTS audio notice (falling back to Google TTS):", geminiAudioErr?.message || geminiAudioErr);
+      }
+    }
+
+    // 2. Try Google Translate TTS (GTX)
+    try {
+      const gtxUrl = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(safeText)}`;
+      const gtxRes = await fetch(gtxUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+      });
+
+      if (gtxRes.ok) {
+        const arrayBuffer = await gtxRes.arrayBuffer();
+        res.set("Content-Type", "audio/mpeg");
+        return res.send(Buffer.from(arrayBuffer));
+      }
+    } catch (gtxErr) {
+      console.warn("Google Translate GTX TTS failed, trying TW-OB...");
+    }
+
+    // 3. Fallback to Google Translate TW-OB
+    const twUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
+    const twRes = await fetch(twUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`TTS service status ${response.status}`);
+    if (twRes.ok) {
+      const arrayBuffer = await twRes.arrayBuffer();
+      res.set("Content-Type", "audio/mpeg");
+      return res.send(Buffer.from(arrayBuffer));
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    res.set("Content-Type", "audio/mpeg");
-    res.send(Buffer.from(arrayBuffer));
+    throw new Error("All TTS audio providers failed");
   } catch (err: any) {
     console.error("TTS endpoint error:", err?.message || err);
     res.status(500).json({ error: "TTS generation failed" });
