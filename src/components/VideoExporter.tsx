@@ -457,6 +457,28 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
             </div>
           </div>
 
+          {/* Model Information Card */}
+          <div className="bg-slate-950/90 border border-slate-800/90 rounded-xl p-3.5 space-y-2 text-xs">
+            <div className="flex items-center gap-2 font-bold text-slate-200">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Kullanılan AI & Medya Modelleri Bilgisi</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-300">
+              <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800/80">
+                <span className="text-slate-400 block font-medium">AI Senaryo Modeli:</span>
+                <span className="text-emerald-400 font-semibold">Google Gemini 2.5 Flash / 3.1 Flash Lite</span>
+              </div>
+              <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800/80">
+                <span className="text-slate-400 block font-medium">Stok Video Motoru:</span>
+                <span className="text-sky-400 font-semibold">Pexels HD Video API</span>
+              </div>
+              <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800/80">
+                <span className="text-slate-400 block font-medium">Seslendirme Motoru:</span>
+                <span className="text-purple-400 font-semibold">Google TTS & Speech Synthesis</span>
+              </div>
+            </div>
+          </div>
+
           {/* Rendering Status Progress Bar */}
           {isRendering && (
             <div className="space-y-3 bg-slate-900/90 p-5 rounded-xl border border-slate-800 shadow-xl">
@@ -518,7 +540,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
         <div className="lg:col-span-5 flex flex-col items-center justify-center bg-slate-900/60 p-4 rounded-xl border border-slate-800 min-h-[360px]">
           <h5 className="text-xs font-bold text-slate-400 mb-3 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Canlı Render Tuvali (Live 9:16 Canvas)</span>
+            <span>Video Render Tuvali (9:16 Canvas)</span>
           </h5>
 
           {renderedVideoUrl && !isRendering ? (

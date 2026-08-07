@@ -163,7 +163,7 @@ export function App() {
     }
   }, [topic, language, customGeminiKey, fetchVideoForScene]);
 
-  // Check server API status on mount & trigger initial generation
+  // Check server API status on mount
   useEffect(() => {
     fetch('/api/status')
       .then((res) => res.json())
@@ -172,11 +172,7 @@ export function App() {
         setPexelsConfigured(data.pexelsConfigured);
       })
       .catch((err) => console.error('Status check failed:', err));
-
-    // Initial default generation on first open
-    handleGenerate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount with initial state values
+  }, []);
 
   const handleRefreshSceneVideo = (index: number) => {
     const scene = scenes[index];
@@ -294,12 +290,12 @@ export function App() {
             }`}
           >
             <Film className="w-4 h-4" />
-            <span>Canlı Shorts & Export</span>
+            <span>Shorts Önizleme & Export</span>
           </button>
         </div>
       </div>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 pt-2 sm:pt-3 pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
         {/* Left Column: Storyboard & Script Editor */}
         <section className={`lg:col-span-7 space-y-4 ${mobileTab === 'editor' ? 'block' : 'hidden lg:block'}`}>
@@ -319,12 +315,12 @@ export function App() {
         </section>
 
         {/* Right Column: 9:16 Shorts Player & Actions */}
-        <section className={`lg:col-span-5 flex flex-col items-center space-y-4 sm:space-y-6 lg:sticky lg:top-24 ${mobileTab === 'player' ? 'block' : 'hidden lg:block'}`}>
+        <section className={`lg:col-span-5 flex flex-col items-center space-y-4 sm:space-y-6 ${mobileTab === 'player' ? 'block' : 'hidden lg:block'}`}>
           
           <div className="w-full flex items-center justify-between bg-slate-900 border border-slate-800 p-3 sm:p-3.5 rounded-2xl shadow-lg">
             <div className="flex items-center space-x-2">
               <Film className="w-4 h-4 text-red-500" />
-              <span className="text-xs font-bold text-slate-200">YouTube Short Canlı Sahne</span>
+              <span className="text-xs font-bold text-slate-200">YouTube Short Önizleme</span>
             </div>
 
             <button

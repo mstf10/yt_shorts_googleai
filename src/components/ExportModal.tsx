@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Scene } from '../types';
 import { VideoExporter } from './VideoExporter';
-import { Download, Copy, Check, FileText, Code, Terminal, Video, X } from 'lucide-react';
+import { Download, Copy, Check, FileText, Code, Video, X, Cpu } from 'lucide-react';
 
 interface ExportModalProps {
   topic: string;
@@ -23,36 +23,49 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onClose,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'video' | 'json' | 'markdown' | 'python'>('video');
+  const [activeTab, setActiveTab] = useState<'video' | 'json' | 'markdown'>('video');
 
   if (!isOpen) return null;
 
-  const jsonExport = JSON.stringify(
-    scenes.map((s) => ({
+  const jsonExportData = {
+    topic,
+    language,
+    models_used: {
+      script_generation: "Google Gemini 2.5 Flash / 3.1 Flash Lite",
+      stock_video_engine: "Pexels HD Stock Video API",
+      voiceover_engine: "Google TTS & Web Speech Synthesis API",
+    },
+    scenes: scenes.map((s) => ({
       scene: s.scene,
       text: s.text,
       visual_query: s.visual_query,
+      video_url: s.video_url || null,
     })),
-    null,
-    2
-  );
+  };
 
-  const markdownExport = `# YouTube Short Script: ${topic}\n\n**Language**: ${language}\n\n## Scenes\n\n${scenes
-    .map(
-      (s) =>
-        `### Scene ${s.scene}\n- **Narration**: "${s.text}"\n- **Stock Query**: \`${s.visual_query}\`\n`
-    )
-    .join('\n')}`;
+  const jsonExport = JSON.stringify(jsonExportData, null, 2);
 
-  const pythonCommand = `# Run using local yt_shorts CLI or Colab:\npython yt_shorts.py "${topic.replace(
-    /"/g,
-    '\\"'
-  )}"`;
+  const markdownExport = `# YouTube Short Script: ${topic}
+
+**Language**: ${language}
+
+### 🤖 Kullanılan AI & Medya Modelleri
+- **Senaryo ve Sahne AI Modeli**: Google Gemini 2.5 Flash / 3.1 Flash Lite
+- **Stok Video Motoru**: Pexels HD Stock Video API
+- **Seslendirme Motoru**: Google TTS & Web Speech Synthesis API
+
+## Scenes
+
+${scenes
+  .map(
+    (s) =>
+      `### Scene ${s.scene}\n- **Narration**: "${s.text}"\n- **Stock Query**: \`${s.visual_query}\`\n`
+  )
+  .join('\n')}`;
 
   const getExportText = () => {
     if (activeTab === 'json') return jsonExport;
-    if (activeTab === 'markdown') return markdownExport;
-    return pythonCommand;
+    return markdownExport;
   };
 
   const handleCopy = () => {
@@ -63,7 +76,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const handleDownloadText = () => {
     const text = getExportText();
-    const ext = activeTab === 'json' ? 'json' : activeTab === 'markdown' ? 'md' : 'sh';
+    const ext = activeTab === 'json' ? 'json' : 'md';
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -84,7 +97,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-xl font-bold text-slate-100 leading-tight">Video Dışa Aktarma & Stüdyo Modu</h3>
-              <p className="text-[11px] sm:text-xs text-slate-400">9:16 dikey video oluşturma, senaryo dışa aktarma ve kod entegrasyonu</p>
+              <p className="text-[11px] sm:text-xs text-slate-400">9:16 dikey video oluşturma ve senaryo dışa aktarma</p>
             </div>
           </div>
 
@@ -129,16 +142,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           >
             <FileText className="w-4 h-4" /> Markdown
           </button>
-          <button
-            onClick={() => setActiveTab('python')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition active:scale-95 cursor-pointer min-h-[38px] ${
-              activeTab === 'python'
-                ? 'bg-red-500 text-white shadow-md'
-                : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Terminal className="w-4 h-4" /> Python CLI
-          </button>
         </div>
 
         {/* Tab Content Area */}
@@ -153,8 +156,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             />
           ) : (
             <div className="flex flex-col h-full space-y-4">
+              <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl flex items-center gap-2 text-xs text-slate-300">
+                <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  <strong>Kullanılan Modeller:</strong> Google Gemini 2.5/3.1 Flash, Pexels HD API, Google TTS API
+                </span>
+              </div>
               <div className="relative flex-1">
-                <pre className="bg-slate-950 p-4 rounded-xl text-xs text-slate-200 font-mono overflow-auto h-full max-h-[calc(100vh-280px)] border border-slate-800">
+                <pre className="bg-slate-950 p-4 rounded-xl text-xs text-slate-200 font-mono overflow-auto h-full max-h-[calc(100vh-320px)] border border-slate-800">
                   {getExportText()}
                 </pre>
               </div>
