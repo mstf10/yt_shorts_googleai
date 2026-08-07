@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
+import { MsEdgeTTS, OUTPUT_FORMAT } from "edge-tts-node";
 
 const app = express();
 const PORT = 3000;
@@ -653,7 +654,66 @@ app.post("/api/fetch-pexels-video", async (req, res) => {
 
 let geminiTtsCooldownUntil = 0;
 
-// API: High Quality Gemini / Multi-Engine TTS Voiceover Audio proxy
+// Helper: Edge TTS audio generation using Microsoft Edge Read Aloud API
+async function generateEdgeTts(text: string, lang: string): Promise<Buffer | null> {
+  try {
+    const tts = new MsEdgeTTS({});
+    let voice = "tr-TR-AhmetNeural";
+    if (lang === "tr") {
+      voice = "tr-TR-AhmetNeural";
+    } else if (lang === "es") {
+      voice = "es-ES-AlvaroNeural";
+    } else if (lang === "de") {
+      voice = "de-DE-ConradNeural";
+    } else if (lang === "fr") {
+      voice = "fr-FR-HenriNeural";
+    } else {
+      voice = "en-US-ChristopherNeural";
+    }
+
+    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
+    const readable = tts.toStream(text);
+
+    return new Promise((resolve) => {
+      const chunks: Buffer[] = [];
+      let finished = false;
+
+      const timeout = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          try { tts.close(); } catch (_) {}
+          resolve(chunks.length > 0 ? Buffer.concat(chunks) : null);
+        }
+      }, 5000);
+
+      readable.on("data", (chunk: any) => {
+        chunks.push(Buffer.from(chunk));
+      });
+
+      readable.on("end", () => {
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeout);
+          try { tts.close(); } catch (_) {}
+          resolve(Buffer.concat(chunks));
+        }
+      });
+
+      readable.on("error", (_err: any) => {
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeout);
+          try { tts.close(); } catch (_) {}
+          resolve(chunks.length > 0 ? Buffer.concat(chunks) : null);
+        }
+      });
+    });
+  } catch (_err: any) {
+    return null;
+  }
+}
+
+// API: High Quality Gemini TTS (Primary) & Edge TTS (Fallback) Voiceover Audio proxy
 app.get("/api/tts", async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   try {
@@ -668,7 +728,7 @@ app.get("/api/tts", async (req, res) => {
 
     const safeText = text.substring(0, 300);
 
-    // 1. Try Gemini Audio Generation if API key is provided and not in rate-limit cooldown
+    // 1. Primary: Try Gemini Audio Generation if API key is provided and not in rate-limit cooldown
     if (effectiveApiKey && Date.now() > geminiTtsCooldownUntil) {
       const ttsModelsToTry = [
         "gemini-3.1-flash-tts-preview",
@@ -709,17 +769,29 @@ app.get("/api/tts", async (req, res) => {
           const errMsg = geminiAudioErr?.message || String(geminiAudioErr);
           if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
             geminiTtsCooldownUntil = Date.now() + 90000;
-            console.log("[TTS Info] Gemini Audio API rate limit (429) hit. Activated 90s cooldown. Using fast Google TTS engine.");
+            console.log("[TTS Info] Gemini Audio API rate limit (429) hit. Activated 90s cooldown. Switching to Edge TTS engine.");
             break;
           } else {
-            console.log(`[TTS Info] Gemini Audio (${modelName}) note: switching to high-speed Google TTS engine.`);
+            console.log(`[TTS Info] Gemini Audio (${modelName}) unavailable: switching to Edge TTS engine.`);
             break;
           }
         }
       }
     }
 
-    // 2. Try Google Translate TTS (GTX)
+    // 2. Fallback: Try Edge TTS (Microsoft Edge Read Aloud API)
+    try {
+      console.log("[TTS Info] Attempting Edge TTS engine...");
+      const edgeAudioBuffer = await generateEdgeTts(safeText, lang);
+      if (edgeAudioBuffer && edgeAudioBuffer.length > 0) {
+        res.set("Content-Type", "audio/mpeg");
+        return res.send(edgeAudioBuffer);
+      }
+    } catch (edgeErr: any) {
+      console.warn("[TTS Info] Edge TTS fallback failed/unavailable, proceeding to Google TTS backup.");
+    }
+
+    // 3. Fallback: High-Speed Google Translate TTS (GTX)
     try {
       const gtxUrl = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(safeText)}`;
       const gtxRes = await fetch(gtxUrl, {
@@ -736,10 +808,10 @@ app.get("/api/tts", async (req, res) => {
         }
       }
     } catch (gtxErr) {
-      console.warn("Google Translate GTX TTS failed, trying TW-OB...");
+      console.warn("[TTS Info] Google Translate GTX TTS failed.");
     }
 
-    // 3. Fallback to Google Translate TW-OB
+    // 4. Fallback: Google Translate TW-OB
     try {
       const twUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
       const twRes = await fetch(twUrl, {
@@ -756,23 +828,7 @@ app.get("/api/tts", async (req, res) => {
         }
       }
     } catch (twErr) {
-      console.warn("Google Translate TW-OB TTS failed, trying Youdao...");
-    }
-
-    // 4. Fallback to Youdao DictVoice
-    try {
-      const ydLang = lang === "tr" ? "tr" : "eng";
-      const ydUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(safeText)}&le=${ydLang}`;
-      const ydRes = await fetch(ydUrl);
-      if (ydRes.ok) {
-        const arrayBuffer = await ydRes.arrayBuffer();
-        if (arrayBuffer.byteLength > 100) {
-          res.set("Content-Type", "audio/mpeg");
-          return res.send(Buffer.from(arrayBuffer));
-        }
-      }
-    } catch (ydErr) {
-      console.warn("Youdao TTS failed...");
+      console.warn("[TTS Info] Google Translate TW-OB TTS failed.");
     }
 
     // Gracefully report client to use browser WebSpeech synthesis without throwing 500 error

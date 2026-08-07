@@ -30,6 +30,10 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
   const startVideoRender = async () => {
     if (scenes.length === 0 || isRendering) return;
 
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
     setIsRendering(true);
     setProgress(0);
     setRenderedVideoUrl(null);
@@ -135,8 +139,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       if (currentText) {
         try {
           const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
-          const savedElevenLabsKey = localStorage.getItem('yt_shorts_elevenlabs_key') || '';
-          const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${isTurkish ? 'tr' : language}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}${savedElevenLabsKey ? `&elevenlabsKey=${encodeURIComponent(savedElevenLabsKey)}` : ''}`;
+          const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${isTurkish ? 'tr' : language}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
 
           const ttsResponse = await fetch(ttsUrl);
           if (ttsResponse.ok) {
@@ -145,8 +148,8 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
 
             sourceNode = audioCtx.createBufferSource();
             sourceNode.buffer = audioBuffer;
+            // Connect strictly to audioDest for recording into the video file without playing live audio through speakers
             sourceNode.connect(audioDest);
-            sourceNode.connect(audioCtx.destination);
 
             audioBufferDurationMs = audioBuffer.duration * 1000;
             sourceNode.onended = () => {
@@ -173,6 +176,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
           const utterance = new SpeechSynthesisUtterance(currentText);
           utterance.rate = speechRate;
           utterance.lang = isTurkish ? 'tr-TR' : 'en-US';
+          utterance.volume = 0; // Silent execution during render
 
           utterance.onboundary = (evt) => {
             if (evt.name === 'word') {
@@ -474,7 +478,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
               </div>
               <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800/80">
                 <span className="text-slate-400 block font-medium">Seslendirme Motoru:</span>
-                <span className="text-purple-400 font-semibold">Google TTS & Speech Synthesis</span>
+                <span className="text-purple-400 font-semibold">Gemini TTS (Öncelikli) & Edge TTS (Yedek)</span>
               </div>
             </div>
           </div>

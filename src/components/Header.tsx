@@ -254,19 +254,6 @@ export const Header: React.FC<HeaderProps> = ({
                         </span>
                       )}
                     </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">ElevenLabs Key:</span>
-                      {testResults?.elevenlabs?.working ? (
-                        <span className="text-emerald-400 font-bold flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> Aktif
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 font-medium flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 text-amber-400" /> Standby/Yedek
-                        </span>
-                      )}
-                    </div>
                   </div>
                 </div>
               )}
@@ -512,7 +499,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <h4 className="font-semibold text-slate-200 text-xs">Öne Çıkan Sistem Özellikleri:</h4>
                 <ul className="space-y-1.5 text-slate-400 list-disc list-inside pl-1">
                   <li><strong className="text-slate-200">Gemini Senaryo Motoru:</strong> Konunuza uygun hook, sahne metinleri, görsel arama terimleri ve ses tonlamaları oluşturur.</li>
-                  <li><strong className="text-slate-200">Çoklu Yapay Zeka Seslendirme:</strong> Gemini 3.1 Flash TTS & 2.5 Pro TTS, sorun yaşanması halinde otomatik ElevenLabs API yedek motoru ve yüksek hızlı Google TTS.</li>
+                  <li><strong className="text-slate-200">Çoklu Yapay Zeka Seslendirme:</strong> Öncelikli Gemini 3.1 Flash / 2.5 Pro TTS motoru ve otomatik Edge TTS (Microsoft Read Aloud) yedekleme sistemi.</li>
                   <li><strong className="text-slate-200">HD Stok Videolar:</strong> Pexels kütüphanesinden konularla eşleşen 1080p dikey stok videoları sahnelere otomatik çeker.</li>
                   <li><strong className="text-slate-200">Senkronize Oynatıcı & Altyazı:</strong> Sahneler arası ses ve video senkronizasyonu, SRT altyazı ve MP4 / ses indirme seçeneği.</li>
                   <li><strong className="text-slate-200">Canlı Kota & Durum Takibi:</strong> Dakikalık ve günlük API kotalarını anlık olarak izleyen akıllı takip sistemi.</li>

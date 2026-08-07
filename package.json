@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "*",
+    "edge-tts-node": "^1.5.7",
     "express": "^4.21.2",
     "lucide-react": "^0.475.0",
     "motion": "^12.4.7",

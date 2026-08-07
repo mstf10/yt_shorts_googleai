@@ -33,7 +33,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     models_used: {
       script_generation: "Google Gemini 2.5 Flash / 3.1 Flash Lite",
       stock_video_engine: "Pexels HD Stock Video API",
-      voiceover_engine: "Google TTS & Web Speech Synthesis API",
+      voiceover_engine: "Google Gemini TTS (Primary) & Edge TTS (Fallback)",
     },
     scenes: scenes.map((s) => ({
       scene: s.scene,
@@ -52,7 +52,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 ### 🤖 Kullanılan AI & Medya Modelleri
 - **Senaryo ve Sahne AI Modeli**: Google Gemini 2.5 Flash / 3.1 Flash Lite
 - **Stok Video Motoru**: Pexels HD Stock Video API
-- **Seslendirme Motoru**: Google TTS & Web Speech Synthesis API
+- **Seslendirme Motoru**: Google Gemini TTS (Öncelikli) & Edge TTS (Yedek)
 
 ## Scenes
 
@@ -159,7 +159,7 @@ ${scenes
               <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl flex items-center gap-2 text-xs text-slate-300">
                 <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  <strong>Kullanılan Modeller:</strong> Google Gemini 2.5/3.1 Flash, Pexels HD API, Google TTS API
+                  <strong>Kullanılan Modeller:</strong> Google Gemini 2.5/3.1 Flash, Pexels HD API, Gemini TTS & Edge TTS
                 </span>
               </div>
               <div className="relative flex-1">
