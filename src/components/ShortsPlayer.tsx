@@ -41,75 +41,178 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
   const [likeCount, setLikeCount] = useState(14200);
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const currentScene = scenes[activeSceneIndex] || scenes[0];
   const currentText = currentScene?.text || '';
-  const isTurkish = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/.test(currentText);
+  const targetLang = (language === 'tr' || /[çğışöüÇĞİŞÖÜ]/i.test(currentText) || /[çğışöüÇĞİŞÖÜ]/i.test(topic)) ? 'tr' : language;
+  const isTurkish = targetLang === 'tr';
   const sceneWords = currentText.trim() ? currentText.trim().split(/\s+/) : [];
 
-  // Web Speech Synthesis handler for realistic voiceover audio playback
+  // High quality audio voiceover player with dual engine (Server TTS + Web Speech API fallback)
   useEffect(() => {
     if (!isPlaying || !currentScene || isMuted || !currentText) {
-      window.speechSynthesis.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
       setActiveWordIndex(-1);
       return;
     }
 
-    window.speechSynthesis.cancel();
+    let isCancelled = false;
+    let wordInterval: any = null;
 
-    const utterance = new SpeechSynthesisUtterance(currentText);
-    utterance.rate = speechRate;
-    utterance.lang = isTurkish ? 'tr-TR' : language === 'es' ? 'es-ES' : language === 'de' ? 'de-DE' : language === 'fr' ? 'fr-FR' : 'en-US';
-
-    // Pick voice if matches
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length > 0) {
-      let match = null;
-      if (isTurkish) {
-        match = voices.find((v) => v.lang.startsWith('tr') || v.name.toLowerCase().includes('turkish'));
-      }
-      if (!match) {
-        match = voices.find(
-          (v) =>
-            v.name.toLowerCase().includes(selectedVoice.toLowerCase()) ||
-            v.lang.startsWith(language)
-        );
-      }
-      if (match) utterance.voice = match;
+    // Stop previous audio/speech
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
 
-    // Word boundary tracking for karaoke subtitle highlight
-    utterance.onboundary = (event) => {
-      if (event.name === 'word') {
-        const charIdx = event.charIndex;
-        let cumulative = 0;
-        for (let i = 0; i < sceneWords.length; i++) {
-          cumulative += sceneWords[i].length + 1;
-          if (cumulative > charIdx) {
-            setActiveWordIndex(i);
-            break;
+    const targetLang = isTurkish ? 'tr' : language;
+    const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
+    const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${targetLang}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
+
+    const audio = new Audio(ttsUrl);
+    audio.playbackRate = speechRate;
+    audioRef.current = audio;
+
+    // Helper to start browser SpeechSynthesis fallback
+    const startSpeechSynthesisFallback = () => {
+      if (isCancelled || !window.speechSynthesis) return;
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(currentText);
+      utterance.rate = speechRate;
+      utterance.lang = isTurkish ? 'tr-TR' : targetLang === 'es' ? 'es-ES' : targetLang === 'de' ? 'de-DE' : targetLang === 'fr' ? 'fr-FR' : 'en-US';
+
+      const applyVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          let match = null;
+          if (isTurkish) {
+            match = voices.find(
+              (v) =>
+                v.lang.toLowerCase().startsWith('tr') ||
+                v.lang.toLowerCase().includes('tur') ||
+                v.name.toLowerCase().includes('turkish') ||
+                v.name.toLowerCase().includes('yelda') ||
+                v.name.toLowerCase().includes('cem')
+            );
+          }
+          if (!match) {
+            match = voices.find(
+              (v) =>
+                v.name.toLowerCase().includes(selectedVoice.toLowerCase()) ||
+                v.lang.toLowerCase().startsWith(targetLang)
+            );
+          }
+          if (match) utterance.voice = match;
+        }
+      };
+
+      applyVoice();
+      window.speechSynthesis.onvoiceschanged = applyVoice;
+
+      utterance.onboundary = (event) => {
+        if (event.name === 'word') {
+          const charIdx = event.charIndex;
+          let cumulative = 0;
+          for (let i = 0; i < sceneWords.length; i++) {
+            cumulative += sceneWords[i].length + 1;
+            if (cumulative > charIdx) {
+              setActiveWordIndex(i);
+              break;
+            }
           }
         }
+      };
+
+      utterance.onend = () => {
+        if (isCancelled) return;
+        setActiveWordIndex(-1);
+        if (activeSceneIndex < scenes.length - 1) {
+          setActiveSceneIndex((prev) => prev + 1);
+        } else {
+          setActiveSceneIndex(0);
+        }
+      };
+
+      utterance.onerror = () => {
+        if (isCancelled) return;
+        setActiveWordIndex(-1);
+        if (activeSceneIndex < scenes.length - 1) {
+          setActiveSceneIndex((prev) => prev + 1);
+        } else {
+          setActiveSceneIndex(0);
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    audio.onplay = () => {
+      if (isCancelled) return;
+      const totalWords = sceneWords.length;
+      if (totalWords > 0) {
+        // Estimate word duration
+        const estimatedDuration = audio.duration && !isNaN(audio.duration) && audio.duration > 0
+          ? audio.duration
+          : Math.max(2.5, currentText.length * 0.08);
+
+        const intervalMs = Math.max(100, (estimatedDuration * 1000) / (totalWords * speechRate));
+        let wIdx = 0;
+        setActiveWordIndex(0);
+
+        if (wordInterval) clearInterval(wordInterval);
+        wordInterval = setInterval(() => {
+          wIdx++;
+          if (wIdx < totalWords) {
+            setActiveWordIndex(wIdx);
+          } else {
+            clearInterval(wordInterval);
+          }
+        }, intervalMs);
       }
     };
 
-    utterance.onend = () => {
+    audio.onended = () => {
+      if (isCancelled) return;
+      if (wordInterval) clearInterval(wordInterval);
       setActiveWordIndex(-1);
-      // Automatically advance to next scene
       if (activeSceneIndex < scenes.length - 1) {
         setActiveSceneIndex((prev) => prev + 1);
       } else {
-        // Loop back to start
         setActiveSceneIndex(0);
       }
     };
 
-    window.speechSynthesis.speak(utterance);
+    audio.onerror = () => {
+      if (isCancelled) return;
+      console.log('Server TTS audio failed/cooldown, switching to browser Turkish SpeechSynthesis...');
+      startSpeechSynthesisFallback();
+    };
+
+    audio.play().catch(() => {
+      if (isCancelled) return;
+      startSpeechSynthesisFallback();
+    });
 
     return () => {
-      window.speechSynthesis.cancel();
+      isCancelled = true;
+      if (wordInterval) clearInterval(wordInterval);
+      audio.pause();
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     };
-  }, [activeSceneIndex, isPlaying, isMuted, selectedVoice, speechRate, currentText, isTurkish, language]);
+  }, [activeSceneIndex, isPlaying, isMuted, currentText, isTurkish, language, speechRate, selectedVoice]);
 
   // Sync video play/pause
   useEffect(() => {
@@ -242,31 +345,40 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
         {/* Bottom Subtitles & Channel Overlay */}
         <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 right-12 sm:right-14 z-20 space-y-2.5 text-white pointer-events-none">
           
-          {/* Karaoke Subtitles Banner */}
-          <div className="bg-black/70 backdrop-blur-md border border-white/10 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-xl">
+          {/* Karaoke Subtitles Banner - 5 Words Synchronized Chunk */}
+          <div className="bg-black/75 backdrop-blur-md border border-white/15 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-xl min-h-[52px] sm:min-h-[60px] flex items-center justify-center transition-all duration-200">
             <p
-              className="text-xs sm:text-sm font-black leading-snug tracking-wide text-center"
+              className="text-sm sm:text-base font-black leading-snug tracking-wide text-center"
               lang={isTurkish ? 'tr' : 'en'}
             >
-              {sceneWords.map((word, wIdx) => {
-                const isHighlight = wIdx === activeWordIndex;
-                const formattedWord = isTurkish
-                  ? word.toLocaleUpperCase('tr-TR')
-                  : word.toLocaleUpperCase('en-US');
+              {(() => {
+                const CHUNK_SIZE = 5;
+                const currentChunkIndex = activeWordIndex >= 0 ? Math.floor(activeWordIndex / CHUNK_SIZE) : 0;
+                const chunkStart = currentChunkIndex * CHUNK_SIZE;
+                const chunkEnd = Math.min(sceneWords.length, chunkStart + CHUNK_SIZE);
+                const visibleWords = sceneWords.slice(chunkStart, chunkEnd);
 
-                return (
-                  <span
-                    key={wIdx}
-                    className={`inline-block px-1 py-0.5 my-0.5 rounded transition-all duration-150 ${
-                      isHighlight
-                        ? 'bg-amber-400 text-black scale-105 shadow-md font-bold'
-                        : 'text-white drop-shadow-md'
-                    }`}
-                  >
-                    {formattedWord}{' '}
-                  </span>
-                );
-              })}
+                return visibleWords.map((word, relIdx) => {
+                  const actualWordIdx = chunkStart + relIdx;
+                  const isHighlight = actualWordIdx === activeWordIndex;
+                  const formattedWord = isTurkish
+                    ? word.toLocaleUpperCase('tr-TR')
+                    : word.toLocaleUpperCase('en-US');
+
+                  return (
+                    <span
+                      key={actualWordIdx}
+                      className={`inline-block px-1.5 py-0.5 my-0.5 rounded transition-all duration-150 ${
+                        isHighlight
+                          ? 'bg-amber-400 text-black scale-105 shadow-md font-black tracking-wider'
+                          : 'text-white drop-shadow-md font-extrabold'
+                      }`}
+                    >
+                      {formattedWord}{' '}
+                    </span>
+                  );
+                });
+              })()}
             </p>
           </div>
 

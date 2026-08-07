@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { StoryboardEditor } from './components/StoryboardEditor';
 import { ShortsPlayer } from './components/ShortsPlayer';
 import { ExportModal } from './components/ExportModal';
+import { ModelStatusPage } from './components/ModelStatusPage';
 import { Scene } from './types';
-import { Download, Sparkles, RefreshCw, Layers, Film } from 'lucide-react';
+import { Download, Sparkles, RefreshCw, Layers, Film, AlertCircle } from 'lucide-react';
 
 export function App() {
+  const [currentPage, setCurrentPage] = useState<'studio' | 'model-status'>('studio');
   const [topic, setTopic] = useState('Evrenin en gizemli 5 kara deliği');
   const [language, setLanguage] = useState('tr');
   const [scenes, setScenes] = useState<Scene[]>([]);
@@ -20,6 +22,7 @@ export function App() {
   const [pexelsConfigured, setPexelsConfigured] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [loadingVideoIndices, setLoadingVideoIndices] = useState<number[]>([]);
+  const [apiNotice, setApiNotice] = useState<{ type: 'warning' | 'error' | 'info'; title: string; message: string } | null>(null);
 
   // Persist keys to localStorage
   const handleSetCustomGeminiKey = (key: string) => {
@@ -40,22 +43,8 @@ export function App() {
     }
   };
 
-  // Check server API status on mount
-  useEffect(() => {
-    fetch('/api/status')
-      .then((res) => res.json())
-      .then((data) => {
-        setGeminiConfigured(data.geminiConfigured);
-        setPexelsConfigured(data.pexelsConfigured);
-      })
-      .catch((err) => console.error('Status check failed:', err));
-
-    // Initial default generation on first open
-    handleGenerate();
-  }, []);
-
   // Fetch Pexels video for a specific scene
-  const fetchVideoForScene = async (index: number, query: string, apiKey?: string) => {
+  const fetchVideoForScene = useCallback(async (index: number, query: string, apiKey?: string) => {
     setLoadingVideoIndices((prev) => [...prev, index]);
     try {
       const res = await fetch('/api/fetch-pexels-video', {
@@ -81,10 +70,10 @@ export function App() {
     } finally {
       setLoadingVideoIndices((prev) => prev.filter((i) => i !== index));
     }
-  };
+  }, [customPexelsKey]);
 
   // Main Script & Video Generation Pipeline
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     if (!topic.trim()) return;
     setIsGenerating(true);
     setActiveSceneIndex(0);
@@ -101,7 +90,30 @@ export function App() {
       });
 
       const data = await res.json();
-      if (data.scenes && Array.isArray(data.scenes)) {
+
+      if (!res.ok || data.error) {
+        setApiNotice({
+          type: 'error',
+          title: 'Üretim Yapılamadı (Gemini API Kota/Hata)',
+          message: data.error || 'Gemini API yanıt vermediği için herhangi bir senaryo üretilmedi.',
+        });
+        if (!data.scenes || data.scenes.length === 0) {
+          setScenes([]);
+        }
+        return;
+      }
+
+      if (data.notice) {
+        setApiNotice({
+          type: 'warning',
+          title: 'API Durumu',
+          message: data.notice,
+        });
+      } else {
+        setApiNotice(null);
+      }
+
+      if (data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
         const generatedScenes: Scene[] = data.scenes;
         setScenes(generatedScenes);
 
@@ -110,12 +122,32 @@ export function App() {
           fetchVideoForScene(index, scene.visual_query);
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to generate script:', err);
+      setApiNotice({
+        type: 'error',
+        title: 'Bağlantı Hatası',
+        message: 'Senaryo sunucusuna ulaşılamadı. Lütfen internet bağlantınızı kontrol edin.',
+      });
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [topic, language, customGeminiKey, fetchVideoForScene]);
+
+  // Check server API status on mount & trigger initial generation
+  useEffect(() => {
+    fetch('/api/status')
+      .then((res) => res.json())
+      .then((data) => {
+        setGeminiConfigured(data.geminiConfigured);
+        setPexelsConfigured(data.pexelsConfigured);
+      })
+      .catch((err) => console.error('Status check failed:', err));
+
+    // Initial default generation on first open
+    handleGenerate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount with initial state values
 
   const handleRefreshSceneVideo = (index: number) => {
     const scene = scenes[index];
@@ -149,7 +181,49 @@ export function App() {
         setCustomGeminiKey={handleSetCustomGeminiKey}
         customPexelsKey={customPexelsKey}
         setCustomPexelsKey={handleSetCustomPexelsKey}
+        onOpenModelStatus={() => setCurrentPage('model-status')}
       />
+
+      {currentPage === 'model-status' ? (
+        <div className="flex-1">
+          <ModelStatusPage
+            customGeminiKey={customGeminiKey}
+            customPexelsKey={customPexelsKey}
+            onBackToStudio={() => setCurrentPage('studio')}
+            onOpenSettings={() => {}}
+          />
+        </div>
+      ) : (
+        <>
+          {/* API Key / System Status Notice Banner */}
+      {apiNotice && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-3 w-full">
+          <div
+            className={`p-3 rounded-2xl border flex items-center justify-between text-xs sm:text-sm font-medium transition ${
+              apiNotice.type === 'error'
+                ? 'bg-red-950/80 border-red-800/80 text-red-200'
+                : apiNotice.type === 'warning'
+                ? 'bg-amber-950/80 border-amber-800/80 text-amber-200'
+                : 'bg-blue-950/80 border-blue-800/80 text-blue-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <div>
+                <span className="font-bold mr-1.5">{apiNotice.title}:</span>
+                <span>{apiNotice.message}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setApiNotice(null)}
+              className="ml-3 p-1 hover:bg-white/10 rounded-lg shrink-0 text-slate-300 hover:text-white transition"
+              title="Kapat"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Tab Switcher Bar (Visible on mobile < lg) */}
       <div className="lg:hidden sticky top-[69px] z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800/80 px-4 py-2">
@@ -227,10 +301,12 @@ export function App() {
           />
         </section>
       </main>
+      </>
+      )}
 
       {/* Footer info bar */}
       <footer className="border-t border-slate-900 py-4 bg-slate-950 text-center text-xs text-slate-500">
-        <p>YT Shorts AI Generator • Powered by Google Gemini 3.6 Flash & Pexels Video Engine</p>
+        <p>YT Shorts AI Generator • Powered by Google Gemini 3.5 & 3.1 Flash Lite and Pexels Video Engine</p>
       </footer>
 
       {/* Export Modal */}

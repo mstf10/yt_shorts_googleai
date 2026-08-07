@@ -111,7 +111,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       })
     );
 
-    const isTurkish = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/.test(topic);
+    const isTurkish = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/i.test(topic) || /[çğışöüÇĞİŞÖÜ]/i.test(scenes[0]?.text || '');
 
     // Render loop scene by scene
     for (let i = 0; i < scenes.length; i++) {
@@ -235,7 +235,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
         ctx.textAlign = 'left';
         ctx.fillText('🔴 YT SHORTS AI', 40, 60);
 
-        // 4. Draw Karaoke Subtitle Overlay
+        // 4. Draw Karaoke Subtitle Overlay (5 Words Synchronized Chunk)
         if (includeSubtitles && currentText) {
           const rawWords = currentText.trim().split(/\s+/);
           if (rawWords.length > 0) {
@@ -253,8 +253,14 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
               }
             }
 
+            const CHUNK_SIZE = 5;
+            const currentChunkIndex = activeWordIndex >= 0 ? Math.floor(activeWordIndex / CHUNK_SIZE) : 0;
+            const chunkStart = currentChunkIndex * CHUNK_SIZE;
+            const chunkEnd = Math.min(rawWords.length, chunkStart + CHUNK_SIZE);
+            const visibleWords = rawWords.slice(chunkStart, chunkEnd);
+
             // Set typography relative to canvas resolution
-            const fontSize = Math.round(width * 0.042); // ~30px on 720p, ~45px on 1080p
+            const fontSize = Math.round(width * 0.046); // ~33px on 720p, ~50px on 1080p
             ctx.font = `900 ${fontSize}px sans-serif, system-ui`;
             ctx.textAlign = 'left';
 
@@ -276,7 +282,8 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
             let currentLineWords: RenderWord[] = [];
             let currentLineWidth = 0;
 
-            rawWords.forEach((wText, index) => {
+            visibleWords.forEach((wText, relIndex) => {
+              const originalIndex = chunkStart + relIndex;
               const formattedWord = isTurkish
                 ? wText.toLocaleUpperCase('tr-TR')
                 : wText.toLocaleUpperCase('en-US');
@@ -297,7 +304,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
 
               currentLineWords.push({
                 text: formattedWord,
-                originalIndex: index,
+                originalIndex,
                 width: wordWidth,
               });
               currentLineWidth += (currentLineWords.length > 1 ? spaceWidth : 0) + wordWidth;
@@ -319,11 +326,11 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
             ctx.save();
 
             // Background banner overlay
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.beginPath();
             ctx.roundRect(40, boxY, width - 80, boxHeight, 20);
             ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
             ctx.lineWidth = 2;
             ctx.stroke();
 

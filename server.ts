@@ -31,12 +31,339 @@ const FALLBACK_VIDEOS: Record<string, string> = {
   default: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
 };
 
+// In-memory model request and token usage tracker
+interface ModelUsageTracker {
+  requestsThisMinute: number;
+  requestsToday: number;
+  tokensThisMinute: number;
+  tokensToday: number;
+  lastMinuteWindow: number;
+  lastDayWindow: string;
+}
+
+const modelUsageTrackerMap: Record<string, ModelUsageTracker> = {};
+
+function trackGeminiUsage(modelId: string, estimatedTokens: number = 300) {
+  const now = new Date();
+  const currentMinuteWindow = Math.floor(now.getTime() / 60000);
+  const currentDayWindow = now.toISOString().split("T")[0];
+
+  if (!modelUsageTrackerMap[modelId]) {
+    modelUsageTrackerMap[modelId] = {
+      requestsThisMinute: 0,
+      requestsToday: 0,
+      tokensThisMinute: 0,
+      tokensToday: 0,
+      lastMinuteWindow: currentMinuteWindow,
+      lastDayWindow: currentDayWindow,
+    };
+  }
+
+  const tracker = modelUsageTrackerMap[modelId];
+
+  // Reset minute window if 60 seconds have passed
+  if (tracker.lastMinuteWindow !== currentMinuteWindow) {
+    tracker.requestsThisMinute = 0;
+    tracker.tokensThisMinute = 0;
+    tracker.lastMinuteWindow = currentMinuteWindow;
+  }
+
+  // Reset day window if new day
+  if (tracker.lastDayWindow !== currentDayWindow) {
+    tracker.requestsToday = 0;
+    tracker.tokensToday = 0;
+    tracker.lastDayWindow = currentDayWindow;
+  }
+
+  tracker.requestsThisMinute += 1;
+  tracker.requestsToday += 1;
+  tracker.tokensThisMinute += estimatedTokens;
+  tracker.tokensToday += estimatedTokens;
+}
+
+// API: Test individual Gemini models status, quotas and remaining usages
+app.post("/api/model-status", async (req, res) => {
+  const { apiKey } = req.body || {};
+  const effectiveGeminiKey = apiKey || process.env.GEMINI_API_KEY;
+
+  const defaultModelsList = [
+    {
+      id: "gemini-3.5-flash-lite",
+      name: "Gemini 3.5 Flash Lite",
+      role: "Birincil Senaryo Motoru (En Hızlı & Yüksek Performans)",
+      quota: { rpm: 15, tpm: 1000000, tpmText: "1.000.000", rpd: 1500 }
+    },
+    {
+      id: "gemini-3.1-flash-lite",
+      name: "Gemini 3.1 Flash Lite",
+      role: "İkincil Yedek Senaryo Motoru",
+      quota: { rpm: 15, tpm: 1000000, tpmText: "1.000.000", rpd: 1500 }
+    },
+    {
+      id: "gemini-2.5-flash",
+      name: "Gemini 2.5 Flash",
+      role: "Çok Modlu Ses / Görsel İşleme & TTS Motoru",
+      quota: { rpm: 15, tpm: 1000000, tpmText: "1.000.000", rpd: 1500 }
+    },
+    {
+      id: "gemini-2.5-pro",
+      name: "Gemini 2.5 Pro",
+      role: "Derin Mantık & Karmaşık Senaryo Motoru",
+      quota: { rpm: 2, tpm: 32000, tpmText: "32.000", rpd: 50 }
+    }
+  ];
+
+  if (!effectiveGeminiKey) {
+    return res.json({
+      configured: false,
+      models: defaultModelsList.map(m => ({
+        ...m,
+        status: "missing",
+        working: false,
+        latencyMs: 0,
+        message: "API Key bulunamadı",
+        usage: {
+          usedRPM: 0,
+          remainingRPM: m.quota.rpm,
+          usedRPD: 0,
+          remainingRPD: m.quota.rpd,
+          usedTPM: 0,
+          remainingTPM: m.quota.tpm,
+        },
+        googleSpecs: {
+          inputTokenLimit: 1048576,
+          outputTokenLimit: 8192,
+        }
+      }))
+    });
+  }
+
+  // Query Google Models API to fetch real API specs
+  let googleModelsMap: Record<string, any> = {};
+  try {
+    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${effectiveGeminiKey}`);
+    if (listRes.ok) {
+      const listData: any = await listRes.json();
+      if (listData && Array.isArray(listData.models)) {
+        listData.models.forEach((gm: any) => {
+          const cleanName = gm.name?.replace("models/", "");
+          if (cleanName) {
+            googleModelsMap[cleanName] = gm;
+          }
+        });
+      }
+    }
+  } catch (gErr) {
+    console.warn("Could not query Google Models API metadata:", gErr);
+  }
+
+  const ai = new GoogleGenAI({
+    apiKey: effectiveGeminiKey,
+    httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+  });
+
+  const modelResults = [];
+
+  for (const m of defaultModelsList) {
+    const startTime = Date.now();
+    let isSuccess = false;
+    let statusMsg = "Hazır ve Bağlı (200 OK)";
+    let latencyMs = 0;
+
+    // Retrieve active usage stats
+    const now = new Date();
+    const currentMinuteWindow = Math.floor(now.getTime() / 60000);
+    const currentDayWindow = now.toISOString().split("T")[0];
+
+    const tracker = modelUsageTrackerMap[m.id] || {
+      requestsThisMinute: 0,
+      requestsToday: 0,
+      tokensThisMinute: 0,
+      tokensToday: 0,
+      lastMinuteWindow: currentMinuteWindow,
+      lastDayWindow: currentDayWindow,
+    };
+
+    // Ensure minute/day resets
+    const usedRPM = tracker.lastMinuteWindow === currentMinuteWindow ? tracker.requestsThisMinute : 0;
+    const usedRPD = tracker.lastDayWindow === currentDayWindow ? tracker.requestsToday : 0;
+    const usedTPM = tracker.lastMinuteWindow === currentMinuteWindow ? tracker.tokensThisMinute : 0;
+
+    const remainingRPM = Math.max(0, m.quota.rpm - usedRPM);
+    const remainingRPD = Math.max(0, m.quota.rpd - usedRPD);
+    const remainingTPM = Math.max(0, m.quota.tpm - usedTPM);
+
+    try {
+      const response = await ai.models.generateContent({
+        model: m.id,
+        contents: "Ping",
+      });
+      latencyMs = Date.now() - startTime;
+      trackGeminiUsage(m.id, 10);
+
+      if (response && response.text) {
+        isSuccess = true;
+      } else {
+        statusMsg = "Boş Yanıt Döndü";
+      }
+    } catch (err: any) {
+      latencyMs = Date.now() - startTime;
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+        statusMsg = "Kota Sınırı Aşımı (429 Rate Limit - Bekleme Modunda)";
+      } else if (errMsg.includes("404") || errMsg.includes("NOT_FOUND")) {
+        statusMsg = "Model Adı veya Bölgesel Erişim Desteklenmiyor";
+      } else if (errMsg.includes("401") || errMsg.includes("invalid")) {
+        statusMsg = "Geçersiz API Anahtarı (401 Unauthorized)";
+      } else {
+        statusMsg = `API Yanıtı: ${errMsg.substring(0, 100)}`;
+      }
+    }
+
+    const gSpec = googleModelsMap[m.id] || {};
+
+    modelResults.push({
+      ...m,
+      status: isSuccess ? "ok" : "warning",
+      working: isSuccess,
+      latencyMs,
+      message: statusMsg,
+      usage: {
+        usedRPM: usedRPM + (isSuccess ? 1 : 0),
+        remainingRPM: Math.max(0, remainingRPM - (isSuccess ? 1 : 0)),
+        usedRPD: usedRPD + (isSuccess ? 1 : 0),
+        remainingRPD: Math.max(0, remainingRPD - (isSuccess ? 1 : 0)),
+        usedTPM: usedTPM + 10,
+        remainingTPM: Math.max(0, remainingTPM - 10),
+      },
+      googleSpecs: {
+        displayName: gSpec.displayName || m.name,
+        inputTokenLimit: gSpec.inputTokenLimit || 1048576,
+        outputTokenLimit: gSpec.outputTokenLimit || 8192,
+        version: gSpec.version || "1.0",
+      }
+    });
+  }
+
+  return res.json({
+    configured: true,
+    models: modelResults,
+    keyType: apiKey ? "Özel Kullanıcı Key'i" : "Sunucu Varsayılan Key'i",
+  });
+});
+
 // API: Check system status
 app.get("/api/status", (req, res) => {
   res.json({
     geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
     pexelsConfigured: Boolean(process.env.PEXELS_API_KEY),
   });
+});
+
+// API: Test Gemini and Pexels API keys
+app.post("/api/test-keys", async (req, res) => {
+  const { geminiKey, pexelsKey } = req.body || {};
+  const effectiveGeminiKey = geminiKey || process.env.GEMINI_API_KEY;
+  const effectivePexelsKey = pexelsKey || process.env.PEXELS_API_KEY;
+
+  const result = {
+    gemini: {
+      configured: Boolean(effectiveGeminiKey),
+      working: false,
+      status: "missing",
+      message: "Gemini API Key tanımlı değil.",
+    },
+    pexels: {
+      configured: Boolean(effectivePexelsKey),
+      working: false,
+      status: "missing",
+      message: "Pexels API Key tanımlı değil (Varsayılan HD stok videolar kullanılıyor).",
+    },
+  };
+
+  // 1. Test Gemini Key
+  if (effectiveGeminiKey) {
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: effectiveGeminiKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+      });
+
+      let testSuccess = false;
+      let lastErrMessage = "";
+
+      const modelsToTest = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
+
+      for (const modelName of modelsToTest) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: "Test connection. Respond with OK.",
+          });
+
+          if (response && response.text) {
+            result.gemini.working = true;
+            result.gemini.status = "ok";
+            result.gemini.message = `Gemini API Key aktif (${modelName} kullanılıyor).`;
+            testSuccess = true;
+            break;
+          }
+        } catch (mErr: any) {
+          lastErrMessage = mErr?.message || String(mErr);
+        }
+      }
+
+      if (!testSuccess) {
+        result.gemini.working = false;
+        result.gemini.status = "error";
+        if (lastErrMessage.includes("429") || lastErrMessage.includes("quota") || lastErrMessage.includes("RESOURCE_EXHAUSTED")) {
+          result.gemini.message = "Gemini API Kota/İstek Limiti Aşımı (429 Rate Limit).";
+        } else if (lastErrMessage.includes("401") || lastErrMessage.includes("API_KEY_INVALID") || lastErrMessage.includes("invalid")) {
+          result.gemini.message = "Geçersiz Gemini API Key (401 Unauthorized / Invalid Key).";
+        } else {
+          result.gemini.message = `Gemini API Hatası: ${lastErrMessage.substring(0, 120)}`;
+        }
+      }
+    } catch (err: any) {
+      result.gemini.working = false;
+      result.gemini.status = "error";
+      result.gemini.message = `Gemini Bağlantı Hatası: ${err?.message || err}`;
+    }
+  }
+
+  // 2. Test Pexels Key
+  if (effectivePexelsKey) {
+    try {
+      const url = "https://api.pexels.com/videos/search?query=nature&per_page=1";
+      const pexRes = await fetch(url, {
+        headers: { Authorization: effectivePexelsKey },
+      });
+
+      if (pexRes.ok) {
+        result.pexels.working = true;
+        result.pexels.status = "ok";
+        result.pexels.message = "Pexels Video API Key aktif ve çalışıyor.";
+      } else if (pexRes.status === 401 || pexRes.status === 403) {
+        result.pexels.working = false;
+        result.pexels.status = "error";
+        result.pexels.message = "Geçersiz Pexels API Key (401/403 Unauthorized).";
+      } else if (pexRes.status === 429) {
+        result.pexels.working = false;
+        result.pexels.status = "error";
+        result.pexels.message = "Pexels API İstek Limiti Doldu (429 Rate Limit).";
+      } else {
+        result.pexels.working = false;
+        result.pexels.status = "error";
+        result.pexels.message = `Pexels API Yanıt Hatası (${pexRes.status}).`;
+      }
+    } catch (err: any) {
+      result.pexels.working = false;
+      result.pexels.status = "error";
+      result.pexels.message = `Pexels Bağlantı Hatası: ${err?.message || err}`;
+    }
+  }
+
+  return res.json(result);
 });
 
 function getFallbackScenes(topic: string, language: string) {
@@ -112,12 +439,10 @@ app.post("/api/generate-script", async (req, res) => {
   const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY;
 
   if (!effectiveApiKey) {
-    console.warn("GEMINI_API_KEY is missing. Returning fallback storyboard script.");
-    return res.json({
-      topic,
-      language,
-      scenes: getFallbackScenes(topic, language),
-      fallback: true,
+    console.warn("GEMINI_API_KEY is missing.");
+    return res.status(400).json({
+      error: "Gemini API Key bulunamadı. Lütfen üst kısımdaki Key butonundan geçerli bir Gemini API Key girin.",
+      scenes: [],
     });
   }
 
@@ -171,31 +496,34 @@ JSON Format required:
 Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible.`;
 
     let responseText = "";
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: prompt,
-      });
-      responseText = response.text || "";
-    } catch (modelErr: any) {
-      // Try fallback model if 3.6-flash is rate limited or unavailable
+    let lastError: any = null;
+    const modelsToTry = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
+
+    for (const modelName of modelsToTry) {
       try {
-        console.log("gemini-3.6-flash rate-limited or busy, attempting gemini-2.5-flash fallback...");
-        const fallbackRes = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+        const response = await ai.models.generateContent({
+          model: modelName,
           contents: prompt,
         });
-        responseText = fallbackRes.text || "";
-      } catch (fallbackErr: any) {
-        console.log("Gemini models quota reached, activating smart factual storyboard template.");
-        return res.json({
-          topic,
-          language,
-          scenes: getFallbackScenes(topic, language),
-          fallback: true,
-          notice: "Gemini API kotası veya yanıt süresi nedeniyle akıllı senaryo motoru kullanıldı.",
-        });
+        responseText = response.text || "";
+        if (responseText) {
+          console.log(`Successfully generated story script using ${modelName}`);
+          break;
+        }
+      } catch (modelErr: any) {
+        lastError = modelErr;
+        const errStr = String(modelErr?.message || modelErr);
+        console.warn(`[Script Gen] Gemini model ${modelName} attempt failed:`, errStr.substring(0, 120));
       }
+    }
+
+    if (!responseText) {
+      console.log("Gemini API quota exceeded or models unavailable. Refusing to generate dummy content per user instructions.");
+      return res.status(429).json({
+        error: "Gemini API kota sınırı (429) veya bağlantı hatası nedeniyle yanıt alınamadı. Herhangi bir senaryo üretilmedi.",
+        quotaExceeded: true,
+        scenes: [],
+      });
     }
 
     const parsedScenes = parseGeminiJson(responseText);
@@ -212,17 +540,16 @@ Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible
         fallback: false,
       });
     } else {
-      throw new Error("Invalid output format from Gemini");
+      return res.status(500).json({
+        error: "Gemini API çıktı üretti ancak geçerli senaryo JSON formatına dönüştürülemedi. Herhangi bir üretim yapılmadı.",
+        scenes: [],
+      });
     }
   } catch (error: any) {
-    console.log("Script generation fallback notice:", error?.message || error);
-    // Graceful recovery for rate limits (429), quota limits or missing API permissions
-    return res.json({
-      topic,
-      language,
-      scenes: getFallbackScenes(topic, language),
-      fallback: true,
-      notice: "Gemini API kotası veya hatası nedeniyle otomatik akıllı senaryo şablonu kullanıldı.",
+    console.log("Script generation error:", error?.message || error);
+    return res.status(500).json({
+      error: `Gemini API Hatası: ${error?.message || "Sunucu bağlantı hatası"}. Herhangi bir senaryo üretilmedi.`,
+      scenes: [],
     });
   }
 });
@@ -321,39 +648,47 @@ app.get("/api/tts", async (req, res) => {
 
     // 1. Try Gemini Audio Generation if API key is provided and not in rate-limit cooldown
     if (effectiveApiKey && Date.now() > geminiTtsCooldownUntil) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey: effectiveApiKey,
-          httpOptions: { headers: { "User-Agent": "aistudio-build" } },
-        });
+      const ttsModelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash"];
+      for (const modelName of ttsModelsToTry) {
+        try {
+          const ai = new GoogleGenAI({
+            apiKey: effectiveApiKey,
+            httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+          });
 
-        const prompt = `Say the following narration text clearly in ${lang === "tr" ? "Turkish" : "English"} with a professional studio voiceover style: "${safeText}"`;
+          const prompt = `Say the following narration text clearly in ${lang === "tr" ? "Turkish" : "English"} with a professional studio voiceover style: "${safeText}"`;
 
-        const geminiRes = await ai.models.generateContent({
-          model: "gemini-3.6-flash",
-          contents: prompt,
-          config: {
-            responseModalities: ["AUDIO"],
-          },
-        });
+          const geminiRes = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: "Puck" },
+                },
+              },
+            },
+          });
 
-        const audioPart = geminiRes.candidates?.[0]?.content?.parts?.find(
-          (p: any) => p.inlineData && p.inlineData.mimeType?.startsWith("audio/")
-        );
+          const audioPart = geminiRes.candidates?.[0]?.content?.parts?.find(
+            (p: any) => p.inlineData && p.inlineData.mimeType?.startsWith("audio/")
+          );
 
-        if (audioPart && audioPart.inlineData?.data) {
-          const buffer = Buffer.from(audioPart.inlineData.data, "base64");
-          res.set("Content-Type", audioPart.inlineData.mimeType || "audio/wav");
-          return res.send(buffer);
-        }
-      } catch (geminiAudioErr: any) {
-        const errMsg = geminiAudioErr?.message || String(geminiAudioErr);
-        if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
-          // Cooldown Gemini TTS audio calls for 90 seconds to prevent 429 spam
-          geminiTtsCooldownUntil = Date.now() + 90000;
-          console.log("[TTS Info] Gemini Audio API rate limit (429) hit. Activated 90s cooldown. Using fast Google TTS engine.");
-        } else {
-          console.log("[TTS Info] Gemini Audio fallback to Google TTS:", errMsg.substring(0, 100));
+          if (audioPart && audioPart.inlineData?.data) {
+            const buffer = Buffer.from(audioPart.inlineData.data, "base64");
+            res.set("Content-Type", audioPart.inlineData.mimeType || "audio/wav");
+            return res.send(buffer);
+          }
+        } catch (geminiAudioErr: any) {
+          const errMsg = geminiAudioErr?.message || String(geminiAudioErr);
+          if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+            geminiTtsCooldownUntil = Date.now() + 90000;
+            console.log("[TTS Info] Gemini Audio API rate limit (429) hit. Activated 90s cooldown. Using fast Google TTS engine.");
+            break;
+          } else {
+            console.log(`[TTS Info] Gemini Audio (${modelName}) fallback:`, errMsg.substring(0, 100));
+          }
         }
       }
     }
@@ -369,31 +704,56 @@ app.get("/api/tts", async (req, res) => {
 
       if (gtxRes.ok) {
         const arrayBuffer = await gtxRes.arrayBuffer();
-        res.set("Content-Type", "audio/mpeg");
-        return res.send(Buffer.from(arrayBuffer));
+        if (arrayBuffer.byteLength > 0) {
+          res.set("Content-Type", "audio/mpeg");
+          return res.send(Buffer.from(arrayBuffer));
+        }
       }
     } catch (gtxErr) {
       console.warn("Google Translate GTX TTS failed, trying TW-OB...");
     }
 
     // 3. Fallback to Google Translate TW-OB
-    const twUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
-    const twRes = await fetch(twUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      },
-    });
+    try {
+      const twUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
+      const twRes = await fetch(twUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+      });
 
-    if (twRes.ok) {
-      const arrayBuffer = await twRes.arrayBuffer();
-      res.set("Content-Type", "audio/mpeg");
-      return res.send(Buffer.from(arrayBuffer));
+      if (twRes.ok) {
+        const arrayBuffer = await twRes.arrayBuffer();
+        if (arrayBuffer.byteLength > 0) {
+          res.set("Content-Type", "audio/mpeg");
+          return res.send(Buffer.from(arrayBuffer));
+        }
+      }
+    } catch (twErr) {
+      console.warn("Google Translate TW-OB TTS failed, trying Youdao...");
     }
 
-    throw new Error("All TTS audio providers failed");
+    // 4. Fallback to Youdao DictVoice
+    try {
+      const ydLang = lang === "tr" ? "tr" : "eng";
+      const ydUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(safeText)}&le=${ydLang}`;
+      const ydRes = await fetch(ydUrl);
+      if (ydRes.ok) {
+        const arrayBuffer = await ydRes.arrayBuffer();
+        if (arrayBuffer.byteLength > 100) {
+          res.set("Content-Type", "audio/mpeg");
+          return res.send(Buffer.from(arrayBuffer));
+        }
+      }
+    } catch (ydErr) {
+      console.warn("Youdao TTS failed...");
+    }
+
+    // Gracefully report client to use browser WebSpeech synthesis without throwing 500 error
+    return res.status(404).json({ error: "Server TTS audio unavailable, using client Web Speech API fallback", fallback: true });
   } catch (err: any) {
-    console.error("TTS endpoint error:", err?.message || err);
-    res.status(500).json({ error: "TTS generation failed" });
+    console.error("TTS endpoint handled error:", err?.message || err);
+    res.status(404).json({ error: "TTS generation unavailable, client fallback activated", fallback: true });
   }
 });
 
