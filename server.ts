@@ -569,8 +569,8 @@ Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible
 // API: Search & Fetch Pexels stock video
 app.post("/api/fetch-pexels-video", async (req, res) => {
   try {
-    const { query, pexelsApiKey } = req.body;
-    const effectiveKey = pexelsApiKey || process.env.PEXELS_API_KEY;
+    const { query, pexelsApiKey, apiKey } = req.body || {};
+    const effectiveKey = String(pexelsApiKey || apiKey || process.env.PEXELS_API_KEY || "").trim();
 
     if (!query) {
       return res.status(400).json({ error: "Query is required" });
