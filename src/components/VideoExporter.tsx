@@ -135,7 +135,8 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       if (currentText) {
         try {
           const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
-          const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${isTurkish ? 'tr' : language}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
+          const savedElevenLabsKey = localStorage.getItem('yt_shorts_elevenlabs_key') || '';
+          const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${isTurkish ? 'tr' : language}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}${savedElevenLabsKey ? `&elevenlabsKey=${encodeURIComponent(savedElevenLabsKey)}` : ''}`;
 
           const ttsResponse = await fetch(ttsUrl);
           if (ttsResponse.ok) {

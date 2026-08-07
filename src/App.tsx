@@ -18,6 +18,7 @@ export function App() {
   const [speechRate, setSpeechRate] = useState(1.0);
   const [customGeminiKey, setCustomGeminiKey] = useState(() => localStorage.getItem('yt_shorts_gemini_key') || '');
   const [customPexelsKey, setCustomPexelsKey] = useState(() => localStorage.getItem('yt_shorts_pexels_key') || '');
+  const [customElevenLabsKey, setCustomElevenLabsKey] = useState(() => localStorage.getItem('yt_shorts_elevenlabs_key') || '');
   const [geminiConfigured, setGeminiConfigured] = useState(false);
   const [pexelsConfigured, setPexelsConfigured] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -40,6 +41,15 @@ export function App() {
       localStorage.setItem('yt_shorts_pexels_key', key);
     } else {
       localStorage.removeItem('yt_shorts_pexels_key');
+    }
+  };
+
+  const handleSetCustomElevenLabsKey = (key: string) => {
+    setCustomElevenLabsKey(key);
+    if (key) {
+      localStorage.setItem('yt_shorts_elevenlabs_key', key);
+    } else {
+      localStorage.removeItem('yt_shorts_elevenlabs_key');
     }
   };
 
@@ -181,6 +191,8 @@ export function App() {
         setCustomGeminiKey={handleSetCustomGeminiKey}
         customPexelsKey={customPexelsKey}
         setCustomPexelsKey={handleSetCustomPexelsKey}
+        customElevenLabsKey={customElevenLabsKey}
+        setCustomElevenLabsKey={handleSetCustomElevenLabsKey}
         onOpenModelStatus={() => setCurrentPage('model-status')}
       />
 

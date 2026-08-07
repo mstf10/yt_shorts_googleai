@@ -327,6 +327,9 @@ export const ModelStatusPage: React.FC<ModelStatusPageProps> = ({
             • <strong className="text-slate-200">Gemini Pro Modelleri (2.5 Pro, 2.5 Pro TTS):</strong> Yüksek kaliteli derin mantık ve seslendirme modelleri olup ücretsiz katmanda dakikada <span className="text-amber-300 font-bold">2 RPM</span>, <span className="text-blue-300 font-bold">32.000 TPM</span> ve günlük <span className="text-emerald-300 font-bold">50 RPD</span> ile sınırlandırılmıştır.
           </p>
           <p>
+            • <strong className="text-slate-200">Otomatik Yedek Seslendirme (ElevenLabs & Google TTS Fallback):</strong> Gemini seslendirme modellerinde kota aşımı (429) veya geçici bir sorun yaşanması durumunda sistem kesintisiz olarak ElevenLabs API veya yüksek hızlı Google TTS motoruna geçerek seslendirme oluşturmaya devam eder.
+          </p>
+          <p>
             • <strong className="text-slate-200">Kalan Kullanım Takibi:</strong> Sunucu ve istemci üzerindeki istekler canlı takip edilerek dakikalık ve günlük kalan kullanım çubuklarında eşzamanlı gösterilir. Dakikalık kota her 60 saniyede, günlük kota ise her 24 saatte bir otomatik yenilenir.
           </p>
         </div>

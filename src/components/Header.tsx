@@ -15,6 +15,12 @@ interface KeyTestResult {
     status: string;
     message: string;
   };
+  elevenlabs?: {
+    configured: boolean;
+    working: boolean;
+    status: string;
+    message: string;
+  };
 }
 
 interface HeaderProps {
@@ -30,6 +36,8 @@ interface HeaderProps {
   setCustomGeminiKey: (k: string) => void;
   customPexelsKey: string;
   setCustomPexelsKey: (k: string) => void;
+  customElevenLabsKey?: string;
+  setCustomElevenLabsKey?: (k: string) => void;
   onOpenModelStatus?: () => void;
 }
 
@@ -46,6 +54,8 @@ export const Header: React.FC<HeaderProps> = ({
   setCustomGeminiKey,
   customPexelsKey,
   setCustomPexelsKey,
+  customElevenLabsKey = '',
+  setCustomElevenLabsKey,
   onOpenModelStatus,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -54,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResults, setTestResults] = useState<KeyTestResult | null>(null);
 
-  const runKeyTest = async (gKey?: string, pKey?: string) => {
+  const runKeyTest = async (gKey?: string, pKey?: string, elKey?: string) => {
     setIsTesting(true);
     try {
       const res = await fetch('/api/test-keys', {
@@ -63,6 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
         body: JSON.stringify({
           geminiKey: gKey !== undefined ? gKey : customGeminiKey,
           pexelsKey: pKey !== undefined ? pKey : customPexelsKey,
+          elevenlabsKey: elKey !== undefined ? elKey : customElevenLabsKey,
         }),
       });
       const data = await res.json();
@@ -222,6 +233,19 @@ export const Header: React.FC<HeaderProps> = ({
                         </span>
                       )}
                     </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">ElevenLabs Key:</span>
+                      {testResults?.elevenlabs?.working ? (
+                        <span className="text-emerald-400 font-bold flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Aktif
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-medium flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-amber-400" /> Standby/Yedek
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -325,38 +349,55 @@ export const Header: React.FC<HeaderProps> = ({
               Girilen API anahtarları tarayıcınıza (localStorage) güvenle kaydedilir. Özel anahtar girebilir veya varsayılan sunucu anahtarını kullanabilirsiniz.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
                   <span>Gemini API Key</span>
-                  {customGeminiKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key Girildi</span>}
+                  {customGeminiKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key</span>}
                 </label>
                 <input
                   type="password"
                   value={customGeminiKey}
                   onChange={(e) => {
                     setCustomGeminiKey(e.target.value);
-                    runKeyTest(e.target.value, customPexelsKey);
+                    runKeyTest(e.target.value, customPexelsKey, customElevenLabsKey);
                   }}
                   placeholder="AIzaSy..."
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500"
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
                 />
               </div>
 
               <div>
                 <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
                   <span>Pexels API Key</span>
-                  {customPexelsKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key Girildi</span>}
+                  {customPexelsKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key</span>}
                 </label>
                 <input
                   type="password"
                   value={customPexelsKey}
                   onChange={(e) => {
                     setCustomPexelsKey(e.target.value);
-                    runKeyTest(customGeminiKey, e.target.value);
+                    runKeyTest(customGeminiKey, e.target.value, customElevenLabsKey);
                   }}
                   placeholder="5363... / pexels token"
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500"
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
+                  <span>ElevenLabs Key (Yedek TTS)</span>
+                  {customElevenLabsKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key</span>}
+                </label>
+                <input
+                  type="password"
+                  value={customElevenLabsKey}
+                  onChange={(e) => {
+                    if (setCustomElevenLabsKey) setCustomElevenLabsKey(e.target.value);
+                    runKeyTest(customGeminiKey, customPexelsKey, e.target.value);
+                  }}
+                  placeholder="xi-api-key / sk_..."
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
                 />
               </div>
             </div>
@@ -366,7 +407,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => runKeyTest()}
                 disabled={isTesting}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-bold rounded-lg border border-slate-700 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-bold rounded-lg border border-slate-700 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shrink-0"
               >
                 {isTesting ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-400" />
@@ -377,7 +418,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               {testResults && (
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {/* Gemini Result Box */}
                   <div
                     className={`p-2 rounded-lg border flex items-start gap-2 ${
@@ -421,6 +462,31 @@ export const Header: React.FC<HeaderProps> = ({
                     <div>
                       <div className="font-bold">Pexels Video API</div>
                       <div className="text-[11px] opacity-90 leading-tight">{testResults.pexels.message}</div>
+                    </div>
+                  </div>
+
+                  {/* ElevenLabs Result Box */}
+                  <div
+                    className={`p-2 rounded-lg border flex items-start gap-2 ${
+                      testResults.elevenlabs?.working
+                        ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
+                        : testResults.elevenlabs?.status === 'error'
+                        ? 'bg-red-950/40 border-red-800/80 text-red-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {testResults.elevenlabs?.working ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : testResults.elevenlabs?.status === 'error' ? (
+                      <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <div className="font-bold">ElevenLabs TTS</div>
+                      <div className="text-[11px] opacity-90 leading-tight">
+                        {testResults.elevenlabs?.message || 'ElevenLabs API Key tanımlı değil.'}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -467,7 +533,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <h4 className="font-semibold text-slate-200 text-xs">Öne Çıkan Sistem Özellikleri:</h4>
                 <ul className="space-y-1.5 text-slate-400 list-disc list-inside pl-1">
                   <li><strong className="text-slate-200">Gemini Senaryo Motoru:</strong> Konunuza uygun hook, sahne metinleri, görsel arama terimleri ve ses tonlamaları oluşturur.</li>
-                  <li><strong className="text-slate-200">Çoklu Yapay Zeka Seslendirme:</strong> Gemini 3.1 Flash TTS, Gemini 2.5 Pro TTS ve yüksek hızlı Google TTS motorları.</li>
+                  <li><strong className="text-slate-200">Çoklu Yapay Zeka Seslendirme:</strong> Gemini 3.1 Flash TTS & 2.5 Pro TTS, sorun yaşanması halinde otomatik ElevenLabs API yedek motoru ve yüksek hızlı Google TTS.</li>
                   <li><strong className="text-slate-200">HD Stok Videolar:</strong> Pexels kütüphanesinden konularla eşleşen 1080p dikey stok videoları sahnelere otomatik çeker.</li>
                   <li><strong className="text-slate-200">Senkronize Oynatıcı & Altyazı:</strong> Sahneler arası ses ve video senkronizasyonu, SRT altyazı ve MP4 / ses indirme seçeneği.</li>
                   <li><strong className="text-slate-200">Canlı Kota & Durum Takibi:</strong> Dakikalık ve günlük API kotalarını anlık olarak izleyen akıllı takip sistemi.</li>

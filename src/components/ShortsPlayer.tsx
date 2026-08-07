@@ -77,7 +77,8 @@ export const ShortsPlayer: React.FC<ShortsPlayerProps> = ({
 
     const targetLang = isTurkish ? 'tr' : language;
     const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
-    const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${targetLang}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
+    const savedElevenLabsKey = localStorage.getItem('yt_shorts_elevenlabs_key') || '';
+    const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${targetLang}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}${savedElevenLabsKey ? `&elevenlabsKey=${encodeURIComponent(savedElevenLabsKey)}` : ''}`;
 
     const audio = new Audio(ttsUrl);
     audio.playbackRate = speechRate;

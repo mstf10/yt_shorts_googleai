@@ -263,14 +263,16 @@ app.get("/api/status", (req, res) => {
   res.json({
     geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
     pexelsConfigured: Boolean(process.env.PEXELS_API_KEY),
+    elevenlabsConfigured: Boolean(process.env.ELEVENLABS_API_KEY),
   });
 });
 
-// API: Test Gemini and Pexels API keys
+// API: Test Gemini, Pexels and ElevenLabs API keys
 app.post("/api/test-keys", async (req, res) => {
-  const { geminiKey, pexelsKey } = req.body || {};
+  const { geminiKey, pexelsKey, elevenlabsKey } = req.body || {};
   const effectiveGeminiKey = geminiKey || process.env.GEMINI_API_KEY;
   const effectivePexelsKey = pexelsKey || process.env.PEXELS_API_KEY;
+  const effectiveElevenLabsKey = elevenlabsKey || process.env.ELEVENLABS_API_KEY;
 
   const result = {
     gemini: {
@@ -284,6 +286,12 @@ app.post("/api/test-keys", async (req, res) => {
       working: false,
       status: "missing",
       message: "Pexels API Key tanımlı değil (Varsayılan HD stok videolar kullanılıyor).",
+    },
+    elevenlabs: {
+      configured: Boolean(effectiveElevenLabsKey),
+      working: false,
+      status: "missing",
+      message: "ElevenLabs API Key tanımlı değil (Gemini sonrası yedek ses motoru).",
     },
   };
 
@@ -366,6 +374,33 @@ app.post("/api/test-keys", async (req, res) => {
       result.pexels.working = false;
       result.pexels.status = "error";
       result.pexels.message = `Pexels Bağlantı Hatası: ${err?.message || err}`;
+    }
+  }
+
+  // 3. Test ElevenLabs Key
+  if (effectiveElevenLabsKey) {
+    try {
+      const elRes = await fetch("https://api.elevenlabs.io/v1/user", {
+        headers: { "xi-api-key": effectiveElevenLabsKey },
+      });
+
+      if (elRes.ok) {
+        result.elevenlabs.working = true;
+        result.elevenlabs.status = "ok";
+        result.elevenlabs.message = "ElevenLabs Voiceover API Key aktif ve çalışıyor.";
+      } else if (elRes.status === 401 || elRes.status === 403) {
+        result.elevenlabs.working = false;
+        result.elevenlabs.status = "error";
+        result.elevenlabs.message = "Geçersiz ElevenLabs API Key (401/403 Unauthorized).";
+      } else {
+        result.elevenlabs.working = false;
+        result.elevenlabs.status = "error";
+        result.elevenlabs.message = `ElevenLabs Yanıt Hatası (${elRes.status}).`;
+      }
+    } catch (err: any) {
+      result.elevenlabs.working = false;
+      result.elevenlabs.status = "error";
+      result.elevenlabs.message = `ElevenLabs Bağlantı Hatası: ${err?.message || err}`;
     }
   }
 
@@ -703,7 +738,49 @@ app.get("/api/tts", async (req, res) => {
       }
     }
 
-    // 2. Try Google Translate TTS (GTX)
+    // 2. ElevenLabs High Quality Voiceover Fallback (if Gemini fails/rate-limited)
+    const customElevenLabsKey = req.query.elevenlabsKey ? String(req.query.elevenlabsKey) : "";
+    const effectiveElevenLabsKey = customElevenLabsKey || process.env.ELEVENLABS_API_KEY;
+
+    if (effectiveElevenLabsKey) {
+      try {
+        // Voice ID: Default Rachel voice or Bella voice
+        const voiceId = "21m00Tcm4TlvDq8ikWAM";
+        const elevenUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+        const elevenRes = await fetch(elevenUrl, {
+          method: "POST",
+          headers: {
+            "xi-api-key": effectiveElevenLabsKey,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+          },
+          body: JSON.stringify({
+            text: safeText,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75,
+            },
+          }),
+        });
+
+        if (elevenRes.ok) {
+          const arrayBuffer = await elevenRes.arrayBuffer();
+          if (arrayBuffer.byteLength > 0) {
+            console.log("[TTS Info] Gemini audio unavailable/failed. Successfully generated voiceover using ElevenLabs API.");
+            res.set("Content-Type", "audio/mpeg");
+            return res.send(Buffer.from(arrayBuffer));
+          }
+        } else {
+          const errBody = await elevenRes.text().catch(() => "");
+          console.warn(`[TTS Warning] ElevenLabs TTS returned status ${elevenRes.status}: ${errBody.substring(0, 100)}`);
+        }
+      } catch (elevenErr: any) {
+        console.warn("[TTS Warning] ElevenLabs TTS fallback failed:", elevenErr?.message || elevenErr);
+      }
+    }
+
+    // 3. Try Google Translate TTS (GTX)
     try {
       const gtxUrl = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(safeText)}`;
       const gtxRes = await fetch(gtxUrl, {
