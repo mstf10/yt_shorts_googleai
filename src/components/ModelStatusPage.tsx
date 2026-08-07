@@ -321,10 +321,10 @@ export const ModelStatusPage: React.FC<ModelStatusPageProps> = ({
         </h3>
         <div className="text-xs text-slate-400 leading-relaxed space-y-2">
           <p>
-            • <strong className="text-slate-200">Gemini 3.5 Flash Lite, 3.1 Flash Lite & 2.5 Flash:</strong> Ücretsiz Google AI Studio API anahtarlarında her üç Flash modeli de <span className="text-amber-300 font-bold">15 RPM (Dakikadaki İstek)</span>, <span className="text-blue-300 font-bold">1.000.000 TPM (Dakikadaki Token)</span> ve <span className="text-emerald-300 font-bold">1.500 RPD (Günlük İstek)</span> resmi kotalarına sahiptir.
+            • <strong className="text-slate-200">Gemini Flash Senaryo & TTS Modelleri (3.5 Flash Lite, 3.1 Flash Lite, 3.1 Flash TTS):</strong> Ücretsiz Google AI Studio API anahtarlarında bu modeller <span className="text-amber-300 font-bold">15 RPM (Dakikadaki İstek)</span>, <span className="text-blue-300 font-bold">1.000.000 TPM (Dakikadaki Token)</span> ve <span className="text-emerald-300 font-bold">1.500 RPD (Günlük İstek)</span> kotalarına sahiptir.
           </p>
           <p>
-            • <strong className="text-slate-200">Gemini 2.5 Pro:</strong> Derin mantık yürütme modeli olup ücretsiz katmanda dakikada 2 istek (RPM) ve günlük 50 istek (RPD) ile sınırlandırılmıştır.
+            • <strong className="text-slate-200">Gemini Pro Modelleri (2.5 Pro, 2.5 Pro TTS):</strong> Yüksek kaliteli derin mantık ve seslendirme modelleri olup ücretsiz katmanda dakikada <span className="text-amber-300 font-bold">2 RPM</span>, <span className="text-blue-300 font-bold">32.000 TPM</span> ve günlük <span className="text-emerald-300 font-bold">50 RPD</span> ile sınırlandırılmıştır.
           </p>
           <p>
             • <strong className="text-slate-200">Kalan Kullanım Takibi:</strong> Sunucu ve istemci üzerindeki istekler canlı takip edilerek dakikalık ve günlük kalan kullanım çubuklarında eşzamanlı gösterilir. Dakikalık kota her 60 saniyede, günlük kota ise her 24 saatte bir otomatik yenilenir.

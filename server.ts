@@ -100,10 +100,16 @@ app.post("/api/model-status", async (req, res) => {
       quota: { rpm: 15, tpm: 1000000, tpmText: "1.000.000", rpd: 1500 }
     },
     {
-      id: "gemini-2.5-flash",
-      name: "Gemini 2.5 Flash",
-      role: "Çok Modlu Ses / Görsel İşleme & TTS Motoru",
+      id: "gemini-3.1-flash-tts-preview",
+      name: "Gemini 3.1 Flash TTS",
+      role: "Yapay Zeka Seslendirme Motoru (3.1 Flash TTS)",
       quota: { rpm: 15, tpm: 1000000, tpmText: "1.000.000", rpd: 1500 }
+    },
+    {
+      id: "gemini-2.5-pro-preview-tts",
+      name: "Gemini 2.5 Pro TTS",
+      role: "Yapay Zeka Yüksek Kalite Seslendirme Motoru (2.5 Pro TTS)",
+      quota: { rpm: 2, tpm: 32000, tpmText: "32.000", rpd: 50 }
     },
     {
       id: "gemini-2.5-pro",
@@ -648,7 +654,10 @@ app.get("/api/tts", async (req, res) => {
 
     // 1. Try Gemini Audio Generation if API key is provided and not in rate-limit cooldown
     if (effectiveApiKey && Date.now() > geminiTtsCooldownUntil) {
-      const ttsModelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash"];
+      const ttsModelsToTry = [
+        "gemini-3.1-flash-tts-preview",
+        "gemini-2.5-pro-preview-tts"
+      ];
       for (const modelName of ttsModelsToTry) {
         try {
           const ai = new GoogleGenAI({
@@ -687,7 +696,8 @@ app.get("/api/tts", async (req, res) => {
             console.log("[TTS Info] Gemini Audio API rate limit (429) hit. Activated 90s cooldown. Using fast Google TTS engine.");
             break;
           } else {
-            console.log(`[TTS Info] Gemini Audio (${modelName}) fallback:`, errMsg.substring(0, 100));
+            console.log(`[TTS Info] Gemini Audio (${modelName}) note: switching to high-speed Google TTS engine.`);
+            break;
           }
         }
       }
