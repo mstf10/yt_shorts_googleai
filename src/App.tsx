@@ -5,7 +5,7 @@ import { ShortsPlayer } from './components/ShortsPlayer';
 import { ExportModal } from './components/ExportModal';
 import { ModelStatusPage } from './components/ModelStatusPage';
 import { Scene } from './types';
-import { Download, Sparkles, RefreshCw, Layers, Film, AlertCircle } from 'lucide-react';
+import { Download, Sparkles, RefreshCw, Layers, Film, AlertCircle, Key } from 'lucide-react';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'studio' | 'model-status'>('studio');
@@ -18,12 +18,18 @@ export function App() {
   const [speechRate, setSpeechRate] = useState(1.0);
   const [customGeminiKey, setCustomGeminiKey] = useState(() => localStorage.getItem('yt_shorts_gemini_key') || '');
   const [customPexelsKey, setCustomPexelsKey] = useState(() => localStorage.getItem('yt_shorts_pexels_key') || '');
-  const [customElevenLabsKey, setCustomElevenLabsKey] = useState(() => localStorage.getItem('yt_shorts_elevenlabs_key') || '');
   const [geminiConfigured, setGeminiConfigured] = useState(false);
   const [pexelsConfigured, setPexelsConfigured] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [showKeySettingsModal, setShowKeySettingsModal] = useState(false);
   const [loadingVideoIndices, setLoadingVideoIndices] = useState<number[]>([]);
-  const [apiNotice, setApiNotice] = useState<{ type: 'warning' | 'error' | 'info'; title: string; message: string } | null>(null);
+  const [apiNotice, setApiNotice] = useState<{
+    type: 'warning' | 'error' | 'info';
+    title: string;
+    message: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
 
   // Persist keys to localStorage
   const handleSetCustomGeminiKey = (key: string) => {
@@ -44,15 +50,6 @@ export function App() {
     }
   };
 
-  const handleSetCustomElevenLabsKey = (key: string) => {
-    setCustomElevenLabsKey(key);
-    if (key) {
-      localStorage.setItem('yt_shorts_elevenlabs_key', key);
-    } else {
-      localStorage.removeItem('yt_shorts_elevenlabs_key');
-    }
-  };
-
   // Fetch Pexels video for a specific scene
   const fetchVideoForScene = useCallback(async (index: number, query: string, apiKey?: string) => {
     setLoadingVideoIndices((prev) => [...prev, index]);
@@ -66,6 +63,15 @@ export function App() {
         }),
       });
       const data = await res.json();
+      if (data.keyError) {
+        setApiNotice({
+          type: 'warning',
+          title: 'Pexels API Key Hatası (401)',
+          message: data.error || 'Pexels API anahtarınız geçersiz. Varsayılan HD videolar kullanılıyor.',
+          actionLabel: 'API Keyleri Düzenle',
+          onAction: () => setShowKeySettingsModal(true),
+        });
+      }
       if (data.video_url) {
         setScenes((prev) =>
           prev.map((s, i) =>
@@ -102,10 +108,19 @@ export function App() {
       const data = await res.json();
 
       if (!res.ok || data.error) {
+        const isKeyErr = data.keyError || res.status === 401 || res.status === 403;
+        const isQuotaErr = data.quotaError || res.status === 429;
+
         setApiNotice({
           type: 'error',
-          title: 'Üretim Yapılamadı (Gemini API Kota/Hata)',
+          title: isKeyErr
+            ? 'Geçersiz Gemini API Key (401 / 403)'
+            : isQuotaErr
+            ? 'Gemini API Kota Limiti (429 Rate Limit)'
+            : 'Üretim Yapılamadı (Gemini API Hatası)',
           message: data.error || 'Gemini API yanıt vermediği için herhangi bir senaryo üretilmedi.',
+          actionLabel: 'API Keyleri Düzenle',
+          onAction: () => setShowKeySettingsModal(true),
         });
         if (!data.scenes || data.scenes.length === 0) {
           setScenes([]);
@@ -118,6 +133,8 @@ export function App() {
           type: 'warning',
           title: 'API Durumu',
           message: data.notice,
+          actionLabel: 'API Keyleri Düzenle',
+          onAction: () => setShowKeySettingsModal(true),
         });
       } else {
         setApiNotice(null);
@@ -138,6 +155,8 @@ export function App() {
         type: 'error',
         title: 'Bağlantı Hatası',
         message: 'Senaryo sunucusuna ulaşılamadı. Lütfen internet bağlantınızı kontrol edin.',
+        actionLabel: 'API Keyleri Kontrol Et',
+        onAction: () => setShowKeySettingsModal(true),
       });
     } finally {
       setIsGenerating(false);
@@ -191,9 +210,9 @@ export function App() {
         setCustomGeminiKey={handleSetCustomGeminiKey}
         customPexelsKey={customPexelsKey}
         setCustomPexelsKey={handleSetCustomPexelsKey}
-        customElevenLabsKey={customElevenLabsKey}
-        setCustomElevenLabsKey={handleSetCustomElevenLabsKey}
         onOpenModelStatus={() => setCurrentPage('model-status')}
+        showKeySettingsModal={showKeySettingsModal}
+        setShowKeySettingsModal={setShowKeySettingsModal}
       />
 
       {currentPage === 'model-status' ? (
@@ -202,7 +221,10 @@ export function App() {
             customGeminiKey={customGeminiKey}
             customPexelsKey={customPexelsKey}
             onBackToStudio={() => setCurrentPage('studio')}
-            onOpenSettings={() => {}}
+            onOpenSettings={() => {
+              setCurrentPage('studio');
+              setShowKeySettingsModal(true);
+            }}
           />
         </div>
       ) : (
@@ -211,28 +233,40 @@ export function App() {
       {apiNotice && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-3 w-full">
           <div
-            className={`p-3 rounded-2xl border flex items-center justify-between text-xs sm:text-sm font-medium transition ${
+            className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm font-medium transition shadow-lg ${
               apiNotice.type === 'error'
-                ? 'bg-red-950/80 border-red-800/80 text-red-200'
+                ? 'bg-red-950/90 border-red-800/90 text-red-100 shadow-red-950/40'
                 : apiNotice.type === 'warning'
-                ? 'bg-amber-950/80 border-amber-800/80 text-amber-200'
-                : 'bg-blue-950/80 border-blue-800/80 text-blue-200'
+                ? 'bg-amber-950/90 border-amber-800/90 text-amber-100 shadow-amber-950/40'
+                : 'bg-blue-950/90 border-blue-800/90 text-blue-100 shadow-blue-950/40'
             }`}
           >
-            <div className="flex items-center space-x-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div className="flex items-start sm:items-center space-x-2.5">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 sm:mt-0 text-red-400" />
               <div>
-                <span className="font-bold mr-1.5">{apiNotice.title}:</span>
+                <span className="font-bold mr-1.5 text-white">{apiNotice.title}:</span>
                 <span>{apiNotice.message}</span>
               </div>
             </div>
-            <button
-              onClick={() => setApiNotice(null)}
-              className="ml-3 p-1 hover:bg-white/10 rounded-lg shrink-0 text-slate-300 hover:text-white transition"
-              title="Kapat"
-            >
-              ✕
-            </button>
+
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              {apiNotice.actionLabel && apiNotice.onAction && (
+                <button
+                  onClick={apiNotice.onAction}
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                >
+                  <Key className="w-3.5 h-3.5 text-amber-300" />
+                  <span>{apiNotice.actionLabel}</span>
+                </button>
+              )}
+              <button
+                onClick={() => setApiNotice(null)}
+                className="p-1 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition cursor-pointer"
+                title="Kapat"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -15,12 +15,6 @@ interface KeyTestResult {
     status: string;
     message: string;
   };
-  elevenlabs?: {
-    configured: boolean;
-    working: boolean;
-    status: string;
-    message: string;
-  };
 }
 
 interface HeaderProps {
@@ -36,9 +30,9 @@ interface HeaderProps {
   setCustomGeminiKey: (k: string) => void;
   customPexelsKey: string;
   setCustomPexelsKey: (k: string) => void;
-  customElevenLabsKey?: string;
-  setCustomElevenLabsKey?: (k: string) => void;
   onOpenModelStatus?: () => void;
+  showKeySettingsModal?: boolean;
+  setShowKeySettingsModal?: (open: boolean) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -54,17 +48,32 @@ export const Header: React.FC<HeaderProps> = ({
   setCustomGeminiKey,
   customPexelsKey,
   setCustomPexelsKey,
-  customElevenLabsKey = '',
-  setCustomElevenLabsKey,
   onOpenModelStatus,
+  showKeySettingsModal,
+  setShowKeySettingsModal,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showKeySettings, setShowKeySettings] = useState(false);
+  const [internalShowKeySettings, setInternalShowKeySettings] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResults, setTestResults] = useState<KeyTestResult | null>(null);
 
-  const runKeyTest = async (gKey?: string, pKey?: string, elKey?: string) => {
+  const showKeySettings = showKeySettingsModal !== undefined ? showKeySettingsModal : internalShowKeySettings;
+  const setShowKeySettings = (open: boolean) => {
+    setInternalShowKeySettings(open);
+    if (setShowKeySettingsModal) {
+      setShowKeySettingsModal(open);
+    }
+  };
+
+  const hasKeyError = Boolean(
+    testResults && (
+      testResults.gemini?.status === 'error' ||
+      testResults.pexels?.status === 'error'
+    )
+  );
+
+  const runKeyTest = async (gKey?: string, pKey?: string) => {
     setIsTesting(true);
     try {
       const res = await fetch('/api/test-keys', {
@@ -73,7 +82,6 @@ export const Header: React.FC<HeaderProps> = ({
         body: JSON.stringify({
           geminiKey: gKey !== undefined ? gKey : customGeminiKey,
           pexelsKey: pKey !== undefined ? pKey : customPexelsKey,
-          elevenlabsKey: elKey !== undefined ? elKey : customElevenLabsKey,
         }),
       });
       const data = await res.json();
@@ -123,8 +131,21 @@ export const Header: React.FC<HeaderProps> = ({
                 className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition active:scale-95 cursor-pointer font-bold text-xs shadow-sm"
                 title="Stüdyo Menüsü"
               >
-                <Menu className="w-4 h-4 text-red-400 shrink-0" />
+                <div className="relative">
+                  <Menu className="w-4 h-4 text-red-400 shrink-0" />
+                  {hasKeyError && (
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                    </span>
+                  )}
+                </div>
                 <span>Menü</span>
+                {hasKeyError && (
+                  <span className="bg-red-900/80 text-red-200 text-[10px] px-1.5 py-0.5 rounded font-extrabold border border-red-700">
+                    Key Hatası
+                  </span>
+                )}
                 <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
@@ -349,7 +370,7 @@ export const Header: React.FC<HeaderProps> = ({
               Girilen API anahtarları tarayıcınıza (localStorage) güvenle kaydedilir. Özel anahtar girebilir veya varsayılan sunucu anahtarını kullanabilirsiniz.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
                   <span>Gemini API Key</span>
@@ -360,7 +381,7 @@ export const Header: React.FC<HeaderProps> = ({
                   value={customGeminiKey}
                   onChange={(e) => {
                     setCustomGeminiKey(e.target.value);
-                    runKeyTest(e.target.value, customPexelsKey, customElevenLabsKey);
+                    runKeyTest(e.target.value, customPexelsKey);
                   }}
                   placeholder="AIzaSy..."
                   className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
@@ -377,26 +398,9 @@ export const Header: React.FC<HeaderProps> = ({
                   value={customPexelsKey}
                   onChange={(e) => {
                     setCustomPexelsKey(e.target.value);
-                    runKeyTest(customGeminiKey, e.target.value, customElevenLabsKey);
+                    runKeyTest(customGeminiKey, e.target.value);
                   }}
                   placeholder="5363... / pexels token"
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
-                  <span>ElevenLabs Key (Yedek TTS)</span>
-                  {customElevenLabsKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key</span>}
-                </label>
-                <input
-                  type="password"
-                  value={customElevenLabsKey}
-                  onChange={(e) => {
-                    if (setCustomElevenLabsKey) setCustomElevenLabsKey(e.target.value);
-                    runKeyTest(customGeminiKey, customPexelsKey, e.target.value);
-                  }}
-                  placeholder="xi-api-key / sk_..."
                   className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
                 />
               </div>
@@ -418,7 +422,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               {testResults && (
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {/* Gemini Result Box */}
                   <div
                     className={`p-2 rounded-lg border flex items-start gap-2 ${
@@ -462,31 +466,6 @@ export const Header: React.FC<HeaderProps> = ({
                     <div>
                       <div className="font-bold">Pexels Video API</div>
                       <div className="text-[11px] opacity-90 leading-tight">{testResults.pexels.message}</div>
-                    </div>
-                  </div>
-
-                  {/* ElevenLabs Result Box */}
-                  <div
-                    className={`p-2 rounded-lg border flex items-start gap-2 ${
-                      testResults.elevenlabs?.working
-                        ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
-                        : testResults.elevenlabs?.status === 'error'
-                        ? 'bg-red-950/40 border-red-800/80 text-red-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {testResults.elevenlabs?.working ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    ) : testResults.elevenlabs?.status === 'error' ? (
-                      <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    )}
-                    <div>
-                      <div className="font-bold">ElevenLabs TTS</div>
-                      <div className="text-[11px] opacity-90 leading-tight">
-                        {testResults.elevenlabs?.message || 'ElevenLabs API Key tanımlı değil.'}
-                      </div>
                     </div>
                   </div>
                 </div>
