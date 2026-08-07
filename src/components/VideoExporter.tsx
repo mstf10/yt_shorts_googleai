@@ -37,7 +37,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
     setIsRendering(true);
     setProgress(0);
     setRenderedVideoUrl(null);
-    setRenderStatusText('Initializing Video Canvas...');
+    setRenderStatusText('Tuval Hazırlanıyor...');
 
     const width = videoQuality === '1080p' ? 1080 : 720;
     const height = videoQuality === '1080p' ? 1920 : 1280;
@@ -71,14 +71,73 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       ...(audioTrack ? [audioTrack] : []),
     ]);
 
+    const isTurkish = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/i.test(topic) || /[çğışöüÇĞİŞÖÜ]/i.test(scenes[0]?.text || '');
+    const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
+
+    // STEP 1: Pre-fetch and decode TTS audio for ALL scenes before recording starts
+    setRenderStatusText('Seslendirme ses dosyaları indiriliyor...');
+    const sceneAudioBuffers: (AudioBuffer | null)[] = await Promise.all(
+      scenes.map(async (scene) => {
+        const text = scene.text || '';
+        if (!text) return null;
+        try {
+          const ttsUrl = `/api/tts?text=${encodeURIComponent(text)}&lang=${isTurkish ? 'tr' : language}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
+          const res = await fetch(ttsUrl);
+          if (res.ok) {
+            const buf = await res.arrayBuffer();
+            return await audioCtx.decodeAudioData(buf);
+          }
+        } catch (e) {
+          console.warn('TTS preload error for scene:', e);
+        }
+        return null;
+      })
+    );
+
+    // STEP 2: Pre-load stock video elements for ALL scenes
+    setRenderStatusText('Stok video arka planları yükleniyor...');
+    const loadedVideos: (HTMLVideoElement | null)[] = await Promise.all(
+      scenes.map((s) => {
+        return new Promise<HTMLVideoElement | null>((resolve) => {
+          if (!s.video_url) return resolve(null);
+          const v = document.createElement('video');
+          v.muted = true;
+          v.loop = true;
+          v.playsInline = true;
+
+          let finished = false;
+          const finish = (result: HTMLVideoElement | null) => {
+            if (!finished) {
+              finished = true;
+              resolve(result);
+            }
+          };
+
+          v.onloadeddata = () => finish(v);
+          v.oncanplay = () => finish(v);
+          v.onerror = () => finish(null);
+
+          // Safety timeout 5s per video
+          setTimeout(() => finish(v.readyState >= 1 ? v : null), 5000);
+
+          v.src = s.video_url;
+          v.load();
+        });
+      })
+    );
+
+    // STEP 3: Start MediaRecorder ONLY NOW after all assets are loaded and ready
     let mediaRecorder: MediaRecorder | null = null;
     const chunks: Blob[] = [];
 
     const supportedTypes = [
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      'video/mp4;codecs=avc1',
+      'video/mp4;codecs=h264,aac',
+      'video/mp4',
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm',
-      'video/mp4',
     ];
     let selectedMime = supportedTypes.find((t) => MediaRecorder.isTypeSupported(t)) || '';
 
@@ -97,119 +156,80 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       mediaRecorder.start();
     }
 
-    // Preload video elements for each scene
-    setRenderStatusText('Loading stock video elements...');
-    const loadedVideos: (HTMLVideoElement | null)[] = await Promise.all(
-      scenes.map((s) => {
-        return new Promise<HTMLVideoElement | null>((resolve) => {
-          if (!s.video_url) return resolve(null);
-          const v = document.createElement('video');
-          v.crossOrigin = 'anonymous';
-          v.src = s.video_url;
-          v.muted = true;
-          v.loop = true;
-          v.playsInline = true;
-          v.onloadeddata = () => resolve(v);
-          v.onerror = () => resolve(null);
-        });
-      })
-    );
-
-    const isTurkish = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/i.test(topic) || /[çğışöüÇĞİŞÖÜ]/i.test(scenes[0]?.text || '');
-
-    // Render loop scene by scene
+    // STEP 4: Render loop scene by scene
     for (let i = 0; i < scenes.length; i++) {
       setCurrentRenderingScene(i + 1);
       const scene = scenes[i];
       const sceneVideo = loadedVideos[i];
+      const audioBuffer = sceneAudioBuffers[i];
+      const currentText = (scene.text || '').trim();
 
       if (sceneVideo) {
-        sceneVideo.play().catch(() => {});
-      }
-
-      setRenderStatusText(`Rendering Scene ${i + 1} / ${scenes.length} (Voiceover & Graphics)...`);
-
-      const currentText = scene.text || '';
-      let speechEnded = false;
-      let activeCharIndex = 0;
-      let audioBufferDurationMs = 0;
-      let audioStartTime = 0;
-      let sourceNode: AudioBufferSourceNode | null = null;
-
-      if (currentText) {
         try {
-          const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
-          const ttsUrl = `/api/tts?text=${encodeURIComponent(currentText)}&lang=${isTurkish ? 'tr' : language}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
-
-          const ttsResponse = await fetch(ttsUrl);
-          if (ttsResponse.ok) {
-            const arrayBuffer = await ttsResponse.arrayBuffer();
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-            sourceNode = audioCtx.createBufferSource();
-            sourceNode.buffer = audioBuffer;
-            // Connect strictly to audioDest for recording into the video file without playing live audio through speakers
-            sourceNode.connect(audioDest);
-
-            audioBufferDurationMs = audioBuffer.duration * 1000;
-            sourceNode.onended = () => {
-              speechEnded = true;
-            };
-
-            audioStartTime = Date.now();
-            sourceNode.start(0);
-          } else {
-            throw new Error(`TTS HTTP status ${ttsResponse.status}`);
-          }
-        } catch (audioErr) {
-          console.warn('TTS decodeAudioData error, proceeding with fallback duration:', audioErr);
-          speechEnded = false;
-        }
-      } else {
-        speechEnded = true;
+          sceneVideo.currentTime = 0;
+          sceneVideo.play().catch(() => {});
+        } catch (_) {}
       }
 
-      // Fallback timer or visual boundary driver if audio stream buffer wasn't loaded
-      if (!sourceNode && currentText) {
-        if (window.speechSynthesis) {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(currentText);
-          utterance.rate = speechRate;
-          utterance.lang = isTurkish ? 'tr-TR' : 'en-US';
-          utterance.volume = 0; // Silent execution during render
+      setRenderStatusText(`Sahne ${i + 1} / ${scenes.length} render ediliyor (Ses & Görsel)...`);
 
-          utterance.onboundary = (evt) => {
-            if (evt.name === 'word') {
-              activeCharIndex = evt.charIndex;
-            }
-          };
-          utterance.onend = () => { speechEnded = true; };
-          utterance.onerror = () => { speechEnded = true; };
-          window.speechSynthesis.speak(utterance);
-        } else {
-          speechEnded = false;
-        }
+      let sourceNode: AudioBufferSourceNode | null = null;
+      let effectiveAudioDurationMs = 0;
+
+      if (audioBuffer) {
+        sourceNode = audioCtx.createBufferSource();
+        sourceNode.buffer = audioBuffer;
+        const speed = Math.max(0.5, Math.min(2.0, speechRate || 1.0));
+        sourceNode.playbackRate.value = speed;
+        // Route strictly into recording destination (no live speaker audio during render)
+        sourceNode.connect(audioDest);
+
+        effectiveAudioDurationMs = (audioBuffer.duration * 1000) / speed;
+        sourceNode.start(0);
       }
 
-      // Minimum time per scene in milliseconds
-      const minSceneTime = Math.max(
-        audioBufferDurationMs + 400,
-        Math.max(3500, currentText.length * 85)
-      );
-      const startTime = Date.now();
+      // Exact scene duration (effective audio duration + 350ms padding)
+      const sceneDurationMs = audioBuffer
+        ? effectiveAudioDurationMs + 350
+        : Math.max(3500, currentText.length * 80);
 
-      // Frame animation loop for scene duration
-      while (!speechEnded || Date.now() - startTime < minSceneTime) {
+      const sceneStartTime = Date.now();
+      const rawWords = currentText ? currentText.split(/\s+/) : [];
+      let totalWordChars = 0;
+      const wordCharCounts = rawWords.map((w) => {
+        const len = w.length;
+        totalWordChars += len;
+        return len;
+      });
+
+      // Frame animation loop
+      while (Date.now() - sceneStartTime < sceneDurationMs) {
         ctx.clearRect(0, 0, width, height);
 
-        // Update activeCharIndex from audio play position if AudioBufferSource is playing
-        if (sourceNode && audioBufferDurationMs > 0) {
-          const elapsedMs = Date.now() - audioStartTime;
-          const ratio = Math.min(1, elapsedMs / audioBufferDurationMs);
-          activeCharIndex = Math.floor(ratio * currentText.length);
+        const elapsedMs = Date.now() - sceneStartTime;
+        const audioProgressRatio = effectiveAudioDurationMs > 0
+          ? Math.min(1, elapsedMs / effectiveAudioDurationMs)
+          : Math.min(1, elapsedMs / sceneDurationMs);
+
+        // Calculate active word index dynamically based on character length weights
+        let activeWordIndex = -1;
+        if (rawWords.length > 0 && audioProgressRatio >= 0) {
+          if (audioProgressRatio >= 1.0) {
+            activeWordIndex = rawWords.length - 1;
+          } else {
+            const targetCharPos = audioProgressRatio * totalWordChars;
+            let accumulated = 0;
+            for (let wIdx = 0; wIdx < rawWords.length; wIdx++) {
+              accumulated += wordCharCounts[wIdx];
+              if (targetCharPos <= accumulated || wIdx === rawWords.length - 1) {
+                activeWordIndex = wIdx;
+                break;
+              }
+            }
+          }
         }
 
-        // 1. Draw video background or gradient fallback
+        // 1. Draw video background or fallback gradient
         if (sceneVideo && sceneVideo.readyState >= 2) {
           ctx.drawImage(sceneVideo, 0, 0, width, height);
         } else {
@@ -240,162 +260,143 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
         ctx.textAlign = 'left';
         ctx.fillText('🔴 YT SHORTS AI', 40, 60);
 
-        // 4. Draw Karaoke Subtitle Overlay (5 Words Synchronized Chunk)
-        if (includeSubtitles && currentText) {
-          const rawWords = currentText.trim().split(/\s+/);
-          if (rawWords.length > 0) {
-            // Calculate active word index from activeCharIndex
-            let activeWordIndex = -1;
-            if (activeCharIndex >= 0) {
-              let charCount = 0;
-              for (let wIdx = 0; wIdx < rawWords.length; wIdx++) {
-                const wLen = rawWords[wIdx].length;
-                if (activeCharIndex >= charCount && activeCharIndex <= charCount + wLen) {
-                  activeWordIndex = wIdx;
-                  break;
-                }
-                charCount += wLen + 1;
-              }
-            }
+        // 4. Draw Karaoke Subtitles (5 Words Chunk)
+        if (includeSubtitles && currentText && rawWords.length > 0) {
+          const CHUNK_SIZE = 5;
+          const currentChunkIndex = activeWordIndex >= 0 ? Math.floor(activeWordIndex / CHUNK_SIZE) : 0;
+          const chunkStart = currentChunkIndex * CHUNK_SIZE;
+          const chunkEnd = Math.min(rawWords.length, chunkStart + CHUNK_SIZE);
+          const visibleWords = rawWords.slice(chunkStart, chunkEnd);
 
-            const CHUNK_SIZE = 5;
-            const currentChunkIndex = activeWordIndex >= 0 ? Math.floor(activeWordIndex / CHUNK_SIZE) : 0;
-            const chunkStart = currentChunkIndex * CHUNK_SIZE;
-            const chunkEnd = Math.min(rawWords.length, chunkStart + CHUNK_SIZE);
-            const visibleWords = rawWords.slice(chunkStart, chunkEnd);
+          const fontSize = Math.round(width * 0.046);
+          ctx.font = `900 ${fontSize}px sans-serif, system-ui`;
+          ctx.textAlign = 'left';
 
-            // Set typography relative to canvas resolution
-            const fontSize = Math.round(width * 0.046); // ~33px on 720p, ~50px on 1080p
-            ctx.font = `900 ${fontSize}px sans-serif, system-ui`;
-            ctx.textAlign = 'left';
+          const spaceWidth = ctx.measureText(' ').width;
+          const maxLineWidth = width - 120;
 
-            const spaceWidth = ctx.measureText(' ').width;
-            const maxLineWidth = width - 120; // 60px padding on each side
+          interface RenderWord {
+            text: string;
+            originalIndex: number;
+            width: number;
+          }
 
-            interface RenderWord {
-              text: string;
-              originalIndex: number;
-              width: number;
-            }
+          interface TextLine {
+            words: RenderWord[];
+            totalWidth: number;
+          }
 
-            interface TextLine {
-              words: RenderWord[];
-              totalWidth: number;
-            }
+          const lines: TextLine[] = [];
+          let currentLineWords: RenderWord[] = [];
+          let currentLineWidth = 0;
 
-            const lines: TextLine[] = [];
-            let currentLineWords: RenderWord[] = [];
-            let currentLineWidth = 0;
+          visibleWords.forEach((wText, relIndex) => {
+            const originalIndex = chunkStart + relIndex;
+            const formattedWord = isTurkish
+              ? wText.toLocaleUpperCase('tr-TR')
+              : wText.toLocaleUpperCase('en-US');
 
-            visibleWords.forEach((wText, relIndex) => {
-              const originalIndex = chunkStart + relIndex;
-              const formattedWord = isTurkish
-                ? wText.toLocaleUpperCase('tr-TR')
-                : wText.toLocaleUpperCase('en-US');
+            const wordWidth = ctx.measureText(formattedWord).width;
 
-              const wordWidth = ctx.measureText(formattedWord).width;
-
-              if (
-                currentLineWords.length > 0 &&
-                currentLineWidth + spaceWidth + wordWidth > maxLineWidth
-              ) {
-                lines.push({
-                  words: currentLineWords,
-                  totalWidth: currentLineWidth,
-                });
-                currentLineWords = [];
-                currentLineWidth = 0;
-              }
-
-              currentLineWords.push({
-                text: formattedWord,
-                originalIndex,
-                width: wordWidth,
-              });
-              currentLineWidth += (currentLineWords.length > 1 ? spaceWidth : 0) + wordWidth;
-            });
-
-            if (currentLineWords.length > 0) {
+            if (
+              currentLineWords.length > 0 &&
+              currentLineWidth + spaceWidth + wordWidth > maxLineWidth
+            ) {
               lines.push({
                 words: currentLineWords,
                 totalWidth: currentLineWidth,
               });
+              currentLineWords = [];
+              currentLineWidth = 0;
             }
 
-            // Calculate Banner Box dimensions
-            const lineHeight = fontSize * 1.45;
-            const boxPaddingY = Math.round(fontSize * 0.6);
-            const boxHeight = lines.length * lineHeight + boxPaddingY * 2;
-            const boxY = height - 160 - boxHeight;
-
-            ctx.save();
-
-            // Background banner overlay
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            ctx.beginPath();
-            ctx.roundRect(40, boxY, width - 80, boxHeight, 20);
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Render each line and word
-            lines.forEach((line, lineIdx) => {
-              const lineY = boxY + boxPaddingY + (lineIdx + 0.72) * lineHeight;
-              let startX = (width - line.totalWidth) / 2;
-
-              line.words.forEach((wordObj) => {
-                const isHighlight = wordObj.originalIndex === activeWordIndex;
-
-                if (isHighlight) {
-                  // Active word background pill (Amber/Yellow)
-                  const pillPadX = Math.round(fontSize * 0.25);
-                  const pillPadY = Math.round(fontSize * 0.12);
-                  ctx.fillStyle = '#fbbf24'; // amber-400
-                  ctx.beginPath();
-                  ctx.roundRect(
-                    startX - pillPadX,
-                    lineY - fontSize + pillPadY,
-                    wordObj.width + pillPadX * 2,
-                    fontSize + pillPadY,
-                    8
-                  );
-                  ctx.fill();
-
-                  // Black text inside yellow highlight
-                  ctx.fillStyle = '#000000';
-                  ctx.fillText(wordObj.text, startX, lineY);
-                } else {
-                  // White text with drop shadow
-                  ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-                  ctx.shadowBlur = 4;
-                  ctx.fillStyle = '#ffffff';
-                  ctx.fillText(wordObj.text, startX, lineY);
-                  ctx.shadowBlur = 0;
-                }
-
-                startX += wordObj.width + spaceWidth;
-              });
+            currentLineWords.push({
+              text: formattedWord,
+              originalIndex,
+              width: wordWidth,
             });
+            currentLineWidth += (currentLineWords.length > 1 ? spaceWidth : 0) + wordWidth;
+          });
 
-            ctx.restore();
+          if (currentLineWords.length > 0) {
+            lines.push({
+              words: currentLineWords,
+              totalWidth: currentLineWidth,
+            });
           }
+
+          const lineHeight = fontSize * 1.45;
+          const boxPaddingY = Math.round(fontSize * 0.6);
+          const boxHeight = lines.length * lineHeight + boxPaddingY * 2;
+          const boxY = height - 160 - boxHeight;
+
+          ctx.save();
+
+          // Background banner
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.beginPath();
+          ctx.roundRect(40, boxY, width - 80, boxHeight, 20);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Render words
+          lines.forEach((line, lineIdx) => {
+            const lineY = boxY + boxPaddingY + (lineIdx + 0.72) * lineHeight;
+            let startX = (width - line.totalWidth) / 2;
+
+            line.words.forEach((wordObj) => {
+              const isHighlight = wordObj.originalIndex === activeWordIndex;
+
+              if (isHighlight) {
+                const pillPadX = Math.round(fontSize * 0.25);
+                const pillPadY = Math.round(fontSize * 0.12);
+                ctx.fillStyle = '#fbbf24'; // amber-400
+                ctx.beginPath();
+                ctx.roundRect(
+                  startX - pillPadX,
+                  lineY - fontSize + pillPadY,
+                  wordObj.width + pillPadX * 2,
+                  fontSize + pillPadY,
+                  8
+                );
+                ctx.fill();
+
+                ctx.fillStyle = '#000000';
+                ctx.fillText(wordObj.text, startX, lineY);
+              } else {
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowBlur = 4;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(wordObj.text, startX, lineY);
+                ctx.shadowBlur = 0;
+              }
+
+              startX += wordObj.width + spaceWidth;
+            });
+          });
+
+          ctx.restore();
         }
 
-        // Calculate progress percentage
-        const elapsedScenePct = Math.min(1, (Date.now() - startTime) / minSceneTime);
+        // Progress update
+        const elapsedScenePct = Math.min(1, elapsedMs / sceneDurationMs);
         const overallPct = Math.round(((i + elapsedScenePct) / scenes.length) * 100);
         setProgress(overallPct);
 
-        await new Promise((r) => setTimeout(r, 33)); // ~30 fps
+        await new Promise((r) => setTimeout(r, 33)); // ~30 FPS
       }
 
+      if (sourceNode) {
+        try { sourceNode.stop(); } catch (_) {}
+      }
       if (sceneVideo) {
-        sceneVideo.pause();
+        try { sceneVideo.pause(); } catch (_) {}
       }
     }
 
-    setRenderStatusText('Finalizing video file output...');
+    setRenderStatusText('Video dosyası oluşturuluyor...');
     window.speechSynthesis.cancel();
 
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -403,13 +404,13 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       await new Promise((r) => setTimeout(r, 500));
     }
 
-    const videoBlob = new Blob(chunks, { type: selectedMime || 'video/webm' });
+    const videoBlob = new Blob(chunks, { type: selectedMime || 'video/mp4' });
     const generatedUrl = URL.createObjectURL(videoBlob);
 
     setRenderedVideoUrl(generatedUrl);
     setIsRendering(false);
     setProgress(100);
-    setRenderStatusText('Video Render Complete!');
+    setRenderStatusText('Video Render Tamamlandı!');
   };
 
   return (
@@ -518,11 +519,11 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <a
                   href={renderedVideoUrl}
-                  download={`yt_short_${topic.substring(0, 15).replace(/\s+/g, '_')}.webm`}
+                  download={`yt_short_${topic.substring(0, 15).replace(/\s+/g, '_')}.mp4`}
                   className="w-full px-5 py-3.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20 transition cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Videoyu İndir (.WebM / MP4)</span>
+                  <span>Videoyu İndir (.MP4)</span>
                 </a>
               </div>
             </div>
