@@ -27,6 +27,14 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Revoke the rendered video's blob URL when the component unmounts to avoid leaking memory.
+  useEffect(() => {
+    return () => {
+      if (renderedVideoUrl) URL.revokeObjectURL(renderedVideoUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderedVideoUrl]);
+
   const startVideoRender = async () => {
     if (scenes.length === 0 || isRendering) return;
 
@@ -34,9 +42,15 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
       window.speechSynthesis.cancel();
     }
 
+    // Release the previous rendered video's blob URL before starting a new render,
+    // otherwise repeated re-renders leak memory (each blob stays alive until page reload).
+    setRenderedVideoUrl((prevUrl) => {
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      return null;
+    });
+
     setIsRendering(true);
     setProgress(0);
-    setRenderedVideoUrl(null);
     setRenderStatusText('Tuval Hazırlanıyor...');
 
     const width = videoQuality === '1080p' ? 1080 : 720;

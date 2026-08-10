@@ -7,17 +7,33 @@ import { MsEdgeTTS, OUTPUT_FORMAT } from "edge-tts-node";
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 // Helper to sanitize Gemini response text
 function parseGeminiJson(text: string) {
+  const cleaned = text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
   try {
-    const cleaned = text
-      .replace(/```json/gi, "")
-      .replace(/```/g, "")
-      .trim();
     return JSON.parse(cleaned);
   } catch (e) {
+    // Gemini sometimes prefixes/suffixes the JSON with stray commentary.
+    // Retry by extracting the outermost [...] or {...} block before giving up.
+    const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+    const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+    const candidate = arrayMatch?.[0] || objectMatch?.[0];
+
+    if (candidate) {
+      try {
+        return JSON.parse(candidate);
+      } catch (e2) {
+        console.error("Failed to parse Gemini JSON output (after extraction retry):", e2, "Raw:", text);
+        return null;
+      }
+    }
+
     console.error("Failed to parse Gemini JSON output:", e, "Raw:", text);
     return null;
   }
@@ -31,6 +47,10 @@ const FALLBACK_VIDEOS: Record<string, string> = {
   tech: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
   default: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
 };
+
+// Centralized list of Gemini text-generation models tried in priority order.
+// Used by /api/generate-script and /api/test-keys so the fallback chain stays in sync.
+const TEXT_GEN_MODELS_TO_TRY = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
 
 // In-memory model request and token usage tracker
 interface ModelUsageTracker {
@@ -299,9 +319,7 @@ app.post("/api/test-keys", async (req, res) => {
       let testSuccess = false;
       let lastErrMessage = "";
 
-      const modelsToTest = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
-
-      for (const modelName of modelsToTest) {
+      for (const modelName of TEXT_GEN_MODELS_TO_TRY) {
         try {
           const response = await ai.models.generateContent({
             model: modelName,
@@ -373,68 +391,6 @@ app.post("/api/test-keys", async (req, res) => {
   return res.json(result);
 });
 
-function getFallbackScenes(topic: string, language: string) {
-  const isTr = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/.test(topic);
-
-  if (isTr) {
-    return [
-      {
-        scene: 1,
-        text: `${topic}, bilimin ve doğanın en büyüleyici konularından biridir.`,
-        visual_query: `${topic} mysterious epic cinematic portrait`,
-      },
-      {
-        scene: 2,
-        text: `${topic} yapısı ve temel özellikleri, fiziksel ve tarihsel sınırları doğrudan etkiler.`,
-        visual_query: `${topic} research technology motion`,
-      },
-      {
-        scene: 3,
-        text: `${topic} etrafında gözlemlenen enerji ve dinamikler, çevresindeki tüm faktörleri dönüştürür.`,
-        visual_query: `abstract cosmic particle light motion`,
-      },
-      {
-        scene: 4,
-        text: `Araştırmacıların ${topic} üzerinde gerçekleştirdiği ölçümler, temel anlayışımızı derinleştirir.`,
-        visual_query: `futuristic digital neon technology portrait`,
-      },
-      {
-        scene: 5,
-        text: `Gelişen yeni teknolojiler sayesinde ${topic} hakkındaki somut veriler ve keşifler gün geçtikçe netleşiyor.`,
-        visual_query: `digital futuristic cinematic light motion`,
-      },
-    ];
-  }
-
-  return [
-    {
-      scene: 1,
-      text: `${topic} is one of the most remarkable subjects in science and nature.`,
-      visual_query: `${topic} mysterious epic background`,
-    },
-    {
-      scene: 2,
-      text: `The core structure and fundamental mechanics of ${topic} push our understanding to new limits.`,
-      visual_query: `${topic} research technology motion`,
-    },
-    {
-      scene: 3,
-      text: `Observed data surrounding ${topic} reveals extraordinary dynamics and unique physical traits.`,
-      visual_query: "abstract geometric laser technology light motion",
-    },
-    {
-      scene: 4,
-      text: `Scientific measurements of ${topic} provide key insights that reshape fundamental research models.`,
-      visual_query: "futuristic digital technology 4k portrait",
-    },
-    {
-      scene: 5,
-      text: `With advancing observational tools, breakthrough discoveries about ${topic} continue to be revealed.`,
-      visual_query: "futuristic digital neon glow particle motion",
-    },
-  ];
-}
-
 // API: Generate YouTube Shorts Script using Gemini
 app.post("/api/generate-script", async (req, res) => {
   const { topic, language = "tr", apiKey } = req.body;
@@ -504,9 +460,8 @@ Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible
 
     let responseText = "";
     let lastError: any = null;
-    const modelsToTry = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
 
-    for (const modelName of modelsToTry) {
+    for (const modelName of TEXT_GEN_MODELS_TO_TRY) {
       try {
         const response = await ai.models.generateContent({
           model: modelName,
@@ -525,9 +480,10 @@ Return ONLY raw valid JSON list. Do not wrap in markdown code blocks if possible
     }
 
     if (!responseText) {
-      console.log("Gemini API quota exceeded or models unavailable. Refusing to generate dummy content per user instructions.");
+      const lastErrMsg = lastError?.message || String(lastError || "bilinmeyen hata");
+      console.log("Gemini API quota exceeded or models unavailable. Refusing to generate dummy content per user instructions. Last error:", lastErrMsg);
       return res.status(429).json({
-        error: "Gemini API kota sınırı (429) veya bağlantı hatası nedeniyle yanıt alınamadı. Herhangi bir senaryo üretilmedi.",
+        error: `Gemini API kota sınırı (429) veya bağlantı hatası nedeniyle yanıt alınamadı. Herhangi bir senaryo üretilmedi. Detay: ${lastErrMsg.substring(0, 150)}`,
         quotaExceeded: true,
         scenes: [],
       });
