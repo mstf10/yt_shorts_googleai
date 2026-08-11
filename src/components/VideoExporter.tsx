@@ -411,7 +411,9 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
     }
 
     setRenderStatusText('Video dosyası oluşturuluyor...');
-    window.speechSynthesis.cancel();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
 
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();

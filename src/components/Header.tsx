@@ -107,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="border-b border-slate-800 bg-slate-900 relative">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+      <div className="w-full px-4 sm:px-6 py-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
           
           {/* Logo & Brand & Menu Button */}

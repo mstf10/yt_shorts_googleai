@@ -192,7 +192,7 @@ export function App() {
   const [mobileTab, setMobileTab] = useState<'editor' | 'player'>('editor');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-red-500 selection:text-white">
+    <div className="h-dvh w-full overflow-hidden bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-red-500 selection:text-white">
       <Header
         topic={topic}
         setTopic={setTopic}
@@ -212,7 +212,7 @@ export function App() {
       />
 
       {currentPage === 'model-status' ? (
-        <div className="flex-1">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <ModelStatusPage
             customGeminiKey={customGeminiKey}
             customPexelsKey={customPexelsKey}
@@ -227,7 +227,7 @@ export function App() {
         <>
           {/* API Key / System Status Notice Banner */}
       {apiNotice && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-3 w-full">
+        <div className="w-full px-4 sm:px-6 mt-3">
           <div
             className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm font-medium transition shadow-lg ${
               apiNotice.type === 'error'
@@ -295,10 +295,10 @@ export function App() {
         </div>
       </div>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 pt-2 sm:pt-3 pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <main className="flex-1 min-h-0 w-full grid grid-cols-1 lg:grid-cols-12 gap-5 px-3 sm:px-6 pt-2 sm:pt-3 pb-4 items-stretch">
         
         {/* Left Column: Storyboard & Script Editor */}
-        <section className={`lg:col-span-7 space-y-4 ${mobileTab === 'editor' ? 'block' : 'hidden lg:block'}`}>
+        <section className={`lg:col-span-7 space-y-4 min-h-0 overflow-y-auto ${mobileTab === 'editor' ? 'block' : 'hidden lg:block'}`}>
           <StoryboardEditor
             scenes={scenes}
             setScenes={setScenes}
@@ -315,7 +315,7 @@ export function App() {
         </section>
 
         {/* Right Column: 9:16 Shorts Player & Actions */}
-        <section className={`lg:col-span-5 flex flex-col items-center space-y-4 sm:space-y-6 ${mobileTab === 'player' ? 'block' : 'hidden lg:block'}`}>
+        <section className={`lg:col-span-5 flex flex-col items-center space-y-4 sm:space-y-6 min-h-0 overflow-y-auto ${mobileTab === 'player' ? 'block' : 'hidden lg:block'}`}>
           
           <div className="w-full flex items-center justify-between bg-slate-900 border border-slate-800 p-3 sm:p-3.5 rounded-2xl shadow-lg">
             <div className="flex items-center space-x-2">

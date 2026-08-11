@@ -78,7 +78,7 @@ export const ModelStatusPage: React.FC<ModelStatusPageProps> = ({
   }, [customGeminiKey]);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="w-full px-4 sm:px-6 py-6 space-y-6">
       
       {/* Top Header Bar with Navigation */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-2xl shadow-xl">
