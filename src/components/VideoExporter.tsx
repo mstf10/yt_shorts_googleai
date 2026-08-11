@@ -2,6 +2,27 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Scene } from '../types';
 import { Video, Download, RefreshCw, CheckCircle, Play, Film, Sparkles, Layers, Sliders } from 'lucide-react';
 
+/**
+ * Draw a video element into a canvas using "object-fit: cover" semantics.
+ * Prevents distortion when compositing landscape stock clips into the 9:16 portrait canvas.
+ */
+function drawVideoCover(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  cw: number,
+  ch: number
+) {
+  const vw = video.videoWidth || 16;
+  const vh = video.videoHeight || 9;
+  if (vw === 0 || vh === 0) return;
+  const scale = Math.max(cw / vw, ch / vh);
+  const sw = cw / scale;
+  const sh = ch / scale;
+  const sx = (vw - sw) / 2;
+  const sy = (vh - sh) / 2;
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+}
+
 interface VideoExporterProps {
   topic: string;
   scenes: Scene[];
@@ -118,6 +139,10 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
           v.muted = true;
           v.loop = true;
           v.playsInline = true;
+          // CRITICAL: Without `crossorigin` the video is fetched in no-cors mode,
+          // the canvas becomes tainted when drawn, and the exported recording
+          // loses the Pexels background (black/empty frames).
+          v.crossOrigin = 'anonymous';
 
           let finished = false;
           const finish = (result: HTMLVideoElement | null) => {
@@ -245,7 +270,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
 
         // 1. Draw video background or fallback gradient
         if (sceneVideo && sceneVideo.readyState >= 2) {
-          ctx.drawImage(sceneVideo, 0, 0, width, height);
+          drawVideoCover(ctx, sceneVideo, width, height);
         } else {
           const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
           bgGradient.addColorStop(0, '#0f172a');

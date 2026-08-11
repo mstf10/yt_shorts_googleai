@@ -39,13 +39,15 @@ function parseGeminiJson(text: string) {
   }
 }
 
-// Fallback high quality video URLs for common visual queries when Pexels API key is omitted or limit reached
+// Fallback high quality video URLs for common visual queries when Pexels API key is omitted or limit reached.
+// NOTE: All fallback hosts must (a) serve HTTP range requests and (b) send `access-control-allow-origin: *`
+// so the video can be drawn to a canvas with crossOrigin='anonymous' during MP4 export.
 const FALLBACK_VIDEOS: Record<string, string> = {
-  space: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-  nature: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-  ocean: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-  tech: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-  default: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+  space: "https://videos.pexels.com/video-files/1093662/1093662-hd_1920_1080_30fps.mp4",
+  nature: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+  ocean: "https://videos.pexels.com/video-files/3129671/3129671-hd_1920_1080_30fps.mp4",
+  tech: "https://videos.pexels.com/video-files/856975/856975-hd_1280_720_25fps.mp4",
+  default: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
 };
 
 // Centralized list of Gemini text-generation models tried in priority order.
