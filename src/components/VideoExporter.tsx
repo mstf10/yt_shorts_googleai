@@ -266,7 +266,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
         bottomGrad.addColorStop(0, 'transparent');
         bottomGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
         ctx.fillStyle = bottomGrad;
-        ctx.fillRect(0, height * 0.6, 0, height * 0.4);
+        ctx.fillRect(0, height * 0.6, width, height * 0.4);
 
         // 3. Header Branding Text
         ctx.font = 'bold 24px sans-serif';
