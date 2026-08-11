@@ -179,8 +179,21 @@ export const ModelStatusPage: React.FC<ModelStatusPageProps> = ({
               const isOk = model.working;
               const isRateLimit = model.message.includes('429') || model.message.includes('Kota');
 
-              const rpmPercent = Math.round((model.usage.remainingRPM / model.quota.rpm) * 100);
-              const rpdPercent = Math.round((model.usage.remainingRPD / model.quota.rpd) * 100);
+              // FIX: Safe percent calculation to prevent NaN/Infinity when quota is 0 or undefined
+              const safePercent = (remaining: number, total: number): number => {
+                if (!total || total <= 0) return 0;
+                const pct = Math.round((remaining / total) * 100);
+                return Math.min(100, Math.max(0, pct));
+              };
+
+              const rpmPercent = safePercent(
+                model.usage?.remainingRPM ?? 0,
+                model.quota?.rpm ?? 0
+              );
+              const rpdPercent = safePercent(
+                model.usage?.remainingRPD ?? 0,
+                model.quota?.rpd ?? 0
+              );
 
               return (
                 <div
