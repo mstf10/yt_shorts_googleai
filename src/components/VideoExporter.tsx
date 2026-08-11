@@ -23,6 +23,20 @@ function drawVideoCover(
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
 }
 
+/**
+ * Route a remote stock-video URL through our same-origin proxy so the browser can
+ * draw it into the export canvas without CORS restrictions (avoiding the tainted
+ * canvas that previously produced a black background in the exported video).
+ */
+function buildProxiedVideoUrl(rawUrl: string | undefined): string {
+  if (!rawUrl) return '';
+  // Only proxy absolute http(s) URLs. Relative/same-origin URLs are used as-is.
+  if (/^https?:\/\//i.test(rawUrl)) {
+    return `/api/video-proxy?url=${encodeURIComponent(rawUrl)}`;
+  }
+  return rawUrl;
+}
+
 interface VideoExporterProps {
   topic: string;
   scenes: Scene[];
@@ -139,9 +153,9 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
           v.muted = true;
           v.loop = true;
           v.playsInline = true;
-          // CRITICAL: Without `crossorigin` the video is fetched in no-cors mode,
-          // the canvas becomes tainted when drawn, and the exported recording
-          // loses the Pexels background (black/empty frames).
+          // The stock video is fetched through our same-origin proxy (/api/video-proxy)
+          // so the canvas never becomes tainted and the Pexels background reliably shows
+          // up in the exported recording (fixes black/empty frames).
           v.crossOrigin = 'anonymous';
 
           let finished = false;
@@ -159,7 +173,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
           // Safety timeout 5s per video
           setTimeout(() => finish(v.readyState >= 1 ? v : null), 5000);
 
-          v.src = s.video_url;
+          v.src = buildProxiedVideoUrl(s.video_url);
           v.load();
         });
       })

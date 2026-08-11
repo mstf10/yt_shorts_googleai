@@ -610,6 +610,73 @@ app.post("/api/fetch-pexels-video", async (req, res) => {
   }
 });
 
+// API: Proxy a remote stock video file through the same-origin server.
+// The browser loads the video from OUR origin (no cross-origin CORS negotiation),
+// so it can always be drawn into a canvas for MP4/WebM export without tainting it.
+// This fixes exports that previously produced a black background because the
+// cross-origin videos.pexels.com request was blocked/mishandled by the browser,
+// which made the canvas drawing fail (empty frames).
+// Supports HTTP Range requests so video elements can seek/replay properly.
+app.get("/api/video-proxy", async (req, res) => {
+  const raw = String(req.query.url || "");
+  // Only allow http(s) remote URLs (prevents local-file / open-redirect abuse).
+  if (!/^https?:\/\/.+/i.test(raw)) {
+    return res.status(400).json({ error: "Invalid video URL" });
+  }
+
+  const upstreamHeaders: Record<string, string> = {
+    // A real browser UA avoids Cloudflare bot-challenges that block raw node fetch on some files.
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  };
+  if (req.headers.range) {
+    upstreamHeaders["Range"] = String(req.headers.range);
+  }
+
+  try {
+    const upstreamRes = await fetch(raw, { headers: upstreamHeaders });
+    if (!upstreamRes.ok && upstreamRes.status !== 206) {
+      return res.status(upstreamRes.status).json({ error: `Upstream video error (${upstreamRes.status})` });
+    }
+
+    res.status(upstreamRes.status);
+    res.set("Content-Type", upstreamRes.headers.get("content-type") || "video/mp4");
+    res.set("Accept-Ranges", upstreamRes.headers.get("accept-ranges") || "bytes");
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Cache-Control", "public, max-age=3600");
+
+    const contentRange = upstreamRes.headers.get("content-range");
+    if (contentRange) res.set("Content-Range", contentRange);
+    const contentLength = upstreamRes.headers.get("content-length");
+    if (contentLength) res.set("Content-Length", contentLength);
+
+    if (upstreamRes.body) {
+      const reader = upstreamRes.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(Buffer.from(value));
+        }
+        res.end();
+      } catch (streamErr: any) {
+        // Client aborted (e.g. navigated away) - stop silently.
+        if (!res.headersSent) res.status(502);
+        try {
+          await reader.cancel();
+        } catch (_) {}
+        res.end();
+      }
+    } else {
+      res.end();
+    }
+  } catch (err: any) {
+    console.error("Video proxy error:", err?.message || err);
+    if (!res.headersSent) return res.status(502).json({ error: "Video proxy failed" });
+    res.end();
+  }
+});
+
 let geminiTtsCooldownUntil = 0;
 
 // Helper: Edge TTS audio generation using Microsoft Edge Read Aloud API
