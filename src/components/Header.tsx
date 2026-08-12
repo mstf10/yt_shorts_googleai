@@ -106,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900 relative">
+    <header className="border-b border-slate-800 bg-slate-900 relative overflow-x-hidden">
       <div className="w-full px-4 sm:px-6 py-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
           
@@ -327,12 +327,12 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Settings & API Key Tester Panel */}
       {showKeySettings && (
         <div className="bg-slate-900/95 border-t border-slate-800 p-4 text-xs">
-          <div className="max-w-3xl mx-auto space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="max-w-3xl mx-auto space-y-4 max-h-[calc(100dvh-90px)] overflow-y-auto pr-1">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 border-b border-slate-800 pb-3">
               <h3 className="font-semibold text-slate-200 text-sm flex items-center gap-1.5">
-                <Key className="w-4 h-4 text-amber-400" /> API Anahtarları Yapılandırma Paneli
+                <Key className="w-4 h-4 text-amber-400 shrink-0" /> API Anahtarları Yapılandırma Paneli
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => {
                     setShowKeySettings(false);
@@ -342,7 +342,7 @@ export const Header: React.FC<HeaderProps> = ({
                   title="Gemini Modelleri ve Kota Sayfası"
                 >
                   <Cpu className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                  <span>Model & Kota Sayfası</span>
+                  <span>Model & Kota</span>
                 </button>
                 <button
                   onClick={() => setShowKeySettings(false)}

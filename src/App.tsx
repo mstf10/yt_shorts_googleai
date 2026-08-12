@@ -192,7 +192,8 @@ export function App() {
   const [mobileTab, setMobileTab] = useState<'editor' | 'player'>('editor');
 
   return (
-    <div className="h-dvh w-full overflow-hidden bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-red-500 selection:text-white">
+    <div className="min-h-dvh w-full bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-red-500 selection:text-white">
+      <div className="sticky top-0 z-30">
       <Header
         topic={topic}
         setTopic={setTopic}
@@ -210,9 +211,10 @@ export function App() {
         showKeySettingsModal={showKeySettingsModal}
         setShowKeySettingsModal={setShowKeySettingsModal}
       />
+      </div>
 
       {currentPage === 'model-status' ? (
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="w-full">
           <ModelStatusPage
             customGeminiKey={customGeminiKey}
             customPexelsKey={customPexelsKey}
@@ -295,10 +297,10 @@ export function App() {
         </div>
       </div>
 
-      <main className="flex-1 min-h-0 w-full grid grid-cols-1 lg:grid-cols-12 gap-5 px-3 sm:px-6 pt-2 sm:pt-3 pb-4 items-stretch">
+      <main className="w-full grid grid-cols-1 lg:grid-cols-12 gap-5 px-3 sm:px-6 pt-2 sm:pt-3 pb-4 items-start">
         
         {/* Left Column: Storyboard & Script Editor */}
-        <section className={`lg:col-span-7 space-y-4 min-h-0 overflow-y-auto ${mobileTab === 'editor' ? 'block' : 'hidden lg:block'}`}>
+        <section className={`lg:col-span-7 space-y-4 ${mobileTab === 'editor' ? 'block' : 'hidden lg:block'}`}>
           <StoryboardEditor
             scenes={scenes}
             setScenes={setScenes}
@@ -315,7 +317,7 @@ export function App() {
         </section>
 
         {/* Right Column: 9:16 Shorts Player & Actions */}
-        <section className={`lg:col-span-5 flex flex-col items-center space-y-4 sm:space-y-6 min-h-0 overflow-y-auto ${mobileTab === 'player' ? 'block' : 'hidden lg:block'}`}>
+        <section className={`lg:col-span-5 flex flex-col items-center space-y-4 sm:space-y-6 ${mobileTab === 'player' ? 'block' : 'hidden lg:block'}`}>
           
           <div className="w-full flex items-center justify-between bg-slate-900 border border-slate-800 p-3 sm:p-3.5 rounded-2xl shadow-lg">
             <div className="flex items-center space-x-2">
