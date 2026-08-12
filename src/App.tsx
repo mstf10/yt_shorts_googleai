@@ -192,8 +192,8 @@ export function App() {
   const [mobileTab, setMobileTab] = useState<'editor' | 'player'>('editor');
 
   return (
-    <div className="min-h-dvh w-full bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-red-500 selection:text-white">
-      <div className="sticky top-0 z-30">
+    <div className="relative z-0 min-h-dvh w-full bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-red-500 selection:text-white">
+      <div className="relative z-30">
       <Header
         topic={topic}
         setTopic={setTopic}
@@ -270,7 +270,7 @@ export function App() {
       )}
 
       {/* Mobile Tab Switcher Bar (Visible on mobile < lg) */}
-      <div className="lg:hidden sticky top-[69px] z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800/80 px-4 py-2">
+      <div className="lg:hidden relative z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800/80 px-4 py-2">
         <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
           <button
             onClick={() => setMobileTab('editor')}
@@ -297,7 +297,7 @@ export function App() {
         </div>
       </div>
 
-      <main className="w-full grid grid-cols-1 lg:grid-cols-12 gap-5 px-3 sm:px-6 pt-2 sm:pt-3 pb-4 items-start">
+      <main className="relative z-10 w-full grid grid-cols-1 lg:grid-cols-12 gap-5 px-3 sm:px-6 pt-2 sm:pt-3 pb-4 items-start">
         
         {/* Left Column: Storyboard & Script Editor */}
         <section className={`lg:col-span-7 space-y-4 ${mobileTab === 'editor' ? 'block' : 'hidden lg:block'}`}>

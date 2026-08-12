@@ -63,6 +63,41 @@ function drawFallbackGradient(ctx: CanvasRenderingContext2D, width: number, heig
   ctx.fillRect(0, 0, width, height);
 }
 
+function waitForVideoReady(video: HTMLVideoElement, timeoutMs = 10000): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (video.readyState >= 2) {
+      resolve(true);
+      return;
+    }
+
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      video.removeEventListener('loadeddata', onReady);
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('error', onError);
+      window.clearTimeout(timer);
+    };
+    const onReady = () => {
+      cleanup();
+      resolve(true);
+    };
+    const onError = () => {
+      cleanup();
+      resolve(false);
+    };
+    const timer = window.setTimeout(() => {
+      cleanup();
+      resolve(video.readyState >= 2);
+    }, timeoutMs);
+
+    video.addEventListener('loadeddata', onReady, { once: true });
+    video.addEventListener('canplay', onReady, { once: true });
+    video.addEventListener('error', onError, { once: true });
+  });
+}
+
 /**
  * Route a remote stock-video URL through our same-origin proxy so the browser can
  * draw it into the export canvas without CORS restrictions (avoiding the tainted
@@ -248,12 +283,12 @@ async function runRender(config: VideoRenderConfig) {
   // Hidden container with valid layout dimensions so browser hardware video decoder does not throttle frame decoding
   const hiddenContainer = document.createElement('div');
   hiddenContainer.style.position = 'fixed';
-  hiddenContainer.style.top = '0';
-  hiddenContainer.style.left = '0';
-  hiddenContainer.style.width = '640px';
-  hiddenContainer.style.height = '360px';
-  hiddenContainer.style.zIndex = '-9999';
-  hiddenContainer.style.opacity = '0.01';
+  hiddenContainer.style.top = '-10000px';
+  hiddenContainer.style.left = '-10000px';
+  hiddenContainer.style.width = '960px';
+  hiddenContainer.style.height = '540px';
+  hiddenContainer.style.zIndex = '2147483646';
+  hiddenContainer.style.opacity = '0';
   hiddenContainer.style.pointerEvents = 'none';
   hiddenContainer.style.overflow = 'hidden';
   document.body.appendChild(hiddenContainer);
@@ -271,8 +306,10 @@ async function runRender(config: VideoRenderConfig) {
         const v = document.createElement('video');
         v.muted = true;
         v.loop = true;
+        v.autoplay = false;
         v.playsInline = true;
         v.preload = 'auto';
+        v.controls = false;
         // Same-origin proxy => the canvas never becomes tainted (fixes black/empty frames).
         v.crossOrigin = 'anonymous';
         hiddenContainer.appendChild(v);
@@ -297,14 +334,24 @@ async function runRender(config: VideoRenderConfig) {
           finish(null);
         };
 
-        // Safety timeout 6s per video.
-        setTimeout(() => {
-          finish(v.readyState >= 1 ? v : null);
-        }, 6000);
-
         const proxiedUrl = buildProxiedVideoUrl(s.video_url);
         v.src = proxiedUrl;
         v.load();
+
+        void waitForVideoReady(v, 10000).then((ready) => {
+          if (ready) {
+            try {
+              v.currentTime = 0.01;
+            } catch (_) {}
+            if (!finished) finish(v);
+          } else if (!finished) {
+            finish(null);
+          }
+        });
+
+        setTimeout(() => {
+          if (!finished) finish(v.readyState >= 2 ? v : null);
+        }, 10000);
       });
     })
   );
@@ -394,7 +441,9 @@ async function runRender(config: VideoRenderConfig) {
     // Ensure video element playback is started and frames are decoding before starting scene loop
     if (sceneVideo) {
       try {
-        sceneVideo.currentTime = 0;
+        if (sceneVideo.readyState >= 2) {
+          sceneVideo.currentTime = 0;
+        }
         const playPromise = sceneVideo.play();
         if (playPromise !== undefined) {
           await playPromise.catch(() => {});
@@ -411,6 +460,7 @@ async function runRender(config: VideoRenderConfig) {
 
     let sourceNode: AudioBufferSourceNode | null = null;
     let effectiveAudioDurationMs = 0;
+    const sceneAudioStartAt = audioCtx.currentTime + 0.08;
 
     if (audioBuffer) {
       sourceNode = audioCtx.createBufferSource();
@@ -420,8 +470,8 @@ async function runRender(config: VideoRenderConfig) {
       sourceNode.connect(audioDest);
 
       effectiveAudioDurationMs = (audioBuffer.duration * 1000) / speed;
-      // Start audio buffer precisely at the current audioCtx timeline position
-      sourceNode.start(audioCtx.currentTime);
+      // Start audio buffer from the actual audio timeline so subtitle timing stays locked to playback.
+      sourceNode.start(sceneAudioStartAt);
     }
 
     // Exact scene duration (effective audio duration + 350ms padding).
@@ -429,7 +479,7 @@ async function runRender(config: VideoRenderConfig) {
       ? effectiveAudioDurationMs + 350
       : Math.max(3500, currentText.length * 80);
 
-    const sceneStartTime = Date.now();
+    const sceneStartTime = performance.now();
     const rawWords = currentText ? currentText.split(/\s+/) : [];
     let totalWordChars = 0;
     const wordCharCounts = rawWords.map((w) => {
@@ -439,16 +489,19 @@ async function runRender(config: VideoRenderConfig) {
     });
 
     // Frame animation loop.
-    while (Date.now() - sceneStartTime < sceneDurationMs) {
+    while (performance.now() - sceneStartTime < sceneDurationMs) {
       if (cancelRequested) break;
 
       ctx.clearRect(0, 0, width, height);
 
-      const elapsedMs = Date.now() - sceneStartTime;
+      const elapsedMs = audioBuffer
+        ? Math.max(0, (audioCtx.currentTime - sceneAudioStartAt) * 1000)
+        : performance.now() - sceneStartTime;
+      const safeElapsedMs = Math.min(elapsedMs, sceneDurationMs);
       const audioProgressRatio =
         effectiveAudioDurationMs > 0
-          ? Math.min(1, elapsedMs / effectiveAudioDurationMs)
-          : Math.min(1, elapsedMs / sceneDurationMs);
+          ? Math.min(1, safeElapsedMs / effectiveAudioDurationMs)
+          : Math.min(1, safeElapsedMs / sceneDurationMs);
 
       // Calculate active word index dynamically based on character length weights.
       let activeWordIndex = -1;
@@ -619,7 +672,7 @@ async function runRender(config: VideoRenderConfig) {
       }
 
       // Progress update.
-      const elapsedScenePct = Math.min(1, elapsedMs / sceneDurationMs);
+      const elapsedScenePct = Math.min(1, safeElapsedMs / sceneDurationMs);
       const overallPct = Math.round(((i + elapsedScenePct) / scenes.length) * 100);
       update({ progress: overallPct });
 

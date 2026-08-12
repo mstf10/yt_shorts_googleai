@@ -66,6 +66,15 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  const openKeySettingsPanel = () => {
+    setIsMenuOpen(false);
+    setShowKeySettings(true);
+  };
+
+  const closeKeySettingsPanel = () => {
+    setShowKeySettings(false);
+  };
+
   const hasKeyError = Boolean(
     testResults && (
       testResults.gemini?.status === 'error' ||
@@ -98,6 +107,23 @@ export const Header: React.FC<HeaderProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const menuButton = target.closest('button[title="Stüdyo Menüsü"]');
+      const menuBox = target.closest('[data-menu-root="studio-menu"]');
+      if (!menuButton && !menuBox) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isMenuOpen]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (topic.trim() && !isGenerating) {
@@ -106,7 +132,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900 relative overflow-x-hidden">
+    <header className="border-b border-slate-800 bg-slate-900 relative z-[60] overflow-visible isolate">
       <div className="w-full px-4 sm:px-6 py-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
           
@@ -125,8 +151,9 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Main Menu Button */}
-            <div className="relative">
+            <div className="relative" data-menu-root="studio-menu">
               <button
+                type="button"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition active:scale-95 cursor-pointer font-bold text-xs shadow-sm"
                 title="Stüdyo Menüsü"
@@ -151,10 +178,11 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Nav Menu Dropdown Overlay */}
               {isMenuOpen && (
-                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl p-3 z-50 space-y-2 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-[0_30px_80px_rgba(15,23,42,0.8)] p-3 z-[100] space-y-2 animate-in fade-in slide-in-from-top-2 duration-150">
                   <div className="px-2 py-1 border-b border-slate-800 flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
                     <span>Stüdyo Menüsü</span>
                     <button
+                      type="button"
                       onClick={() => setIsMenuOpen(false)}
                       className="text-slate-500 hover:text-slate-300 p-1 text-xs cursor-pointer"
                     >
@@ -185,10 +213,8 @@ export const Header: React.FC<HeaderProps> = ({
 
                   {/* Menu Option 2: API Keys Configuration */}
                   <button
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setShowKeySettings(!showKeySettings);
-                    }}
+                    type="button"
+                    onClick={openKeySettingsPanel}
                     className="w-full text-left p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition group flex items-start gap-3 cursor-pointer"
                   >
                     <div className="p-2 rounded-lg bg-amber-950/80 border border-amber-800/60 text-amber-400 group-hover:bg-amber-900/80 shrink-0">
@@ -326,137 +352,141 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Settings & API Key Tester Panel */}
       {showKeySettings && (
-        <div className="bg-slate-900/95 border-t border-slate-800 p-4 text-xs">
-          <div className="max-w-3xl mx-auto space-y-4 max-h-[calc(100dvh-90px)] overflow-y-auto pr-1">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 border-b border-slate-800 pb-3">
-              <h3 className="font-semibold text-slate-200 text-sm flex items-center gap-1.5">
-                <Key className="w-4 h-4 text-amber-400 shrink-0" /> API Anahtarları Yapılandırma Paneli
-              </h3>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => {
-                    setShowKeySettings(false);
-                    if (onOpenModelStatus) onOpenModelStatus();
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-red-950/90 hover:bg-red-900/90 text-red-300 hover:text-red-100 border border-red-800/80 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
-                  title="Gemini Modelleri ve Kota Sayfası"
-                >
-                  <Cpu className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                  <span>Model & Kota</span>
-                </button>
-                <button
-                  onClick={() => setShowKeySettings(false)}
-                  className="text-slate-400 hover:text-slate-200 font-bold px-2 py-1 cursor-pointer"
-                >
-                  ✕ Kapat
-                </button>
-              </div>
-            </div>
-
-            <p className="text-slate-400 leading-relaxed">
-              Girilen API anahtarları tarayıcınıza (localStorage) güvenle kaydedilir. Özel anahtar girebilir veya varsayılan sunucu anahtarını kullanabilirsiniz.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
-                  <span>Gemini API Key</span>
-                  {customGeminiKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key</span>}
-                </label>
-                <input
-                  type="password"
-                  value={customGeminiKey}
-                  onChange={(e) => {
-                    setCustomGeminiKey(e.target.value);
-                    runKeyTest(e.target.value, customPexelsKey);
-                  }}
-                  placeholder="AIzaSy..."
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
-                  <span>Pexels API Key</span>
-                  {customPexelsKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key</span>}
-                </label>
-                <input
-                  type="password"
-                  value={customPexelsKey}
-                  onChange={(e) => {
-                    setCustomPexelsKey(e.target.value);
-                    runKeyTest(customGeminiKey, e.target.value);
-                  }}
-                  placeholder="5363... / pexels token"
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
-                />
-              </div>
-            </div>
-
-            {/* Key Test Results & Action */}
-            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-800">
-              <button
-                onClick={() => runKeyTest()}
-                disabled={isTesting}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-bold rounded-lg border border-slate-700 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shrink-0"
-              >
-                {isTesting ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-400" />
-                ) : (
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                )}
-                <span>{isTesting ? 'Key\'ler Test Ediliyor...' : 'API Key\'leri Test Et'}</span>
-              </button>
-
-              {testResults && (
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {/* Gemini Result Box */}
-                  <div
-                    className={`p-2 rounded-lg border flex items-start gap-2 ${
-                      testResults.gemini.working
-                        ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
-                        : testResults.gemini.status === 'error'
-                        ? 'bg-red-950/40 border-red-800/80 text-red-300'
-                        : 'bg-amber-950/40 border-amber-800/80 text-amber-300'
-                    }`}
+        <div className="fixed inset-x-0 top-4 z-[110] flex justify-center px-4 pointer-events-none">
+          <div className="pointer-events-auto w-full max-w-4xl rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-[0_35px_100px_rgba(2,6,23,0.9)] backdrop-blur-md p-4 text-xs">
+            <div className="max-w-4xl mx-auto space-y-4 max-h-[calc(100dvh-90px)] overflow-y-auto pr-1">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 border-b border-slate-800 pb-3">
+                <h3 className="font-semibold text-slate-200 text-sm flex items-center gap-1.5">
+                  <Key className="w-4 h-4 text-amber-400 shrink-0" /> API Anahtarları Yapılandırma Paneli
+                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeKeySettingsPanel();
+                      if (onOpenModelStatus) onOpenModelStatus();
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-red-950/90 hover:bg-red-900/90 text-red-300 hover:text-red-100 border border-red-800/80 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                    title="Gemini Modelleri ve Kota Sayfası"
                   >
-                    {testResults.gemini.working ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    ) : testResults.gemini.status === 'error' ? (
-                      <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    )}
-                    <div>
-                      <div className="font-bold">Gemini API</div>
-                      <div className="text-[11px] opacity-90 leading-tight">{testResults.gemini.message}</div>
-                    </div>
-                  </div>
-
-                  {/* Pexels Result Box */}
-                  <div
-                    className={`p-2 rounded-lg border flex items-start gap-2 ${
-                      testResults.pexels.working
-                        ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
-                        : testResults.pexels.status === 'error'
-                        ? 'bg-red-950/40 border-red-800/80 text-red-300'
-                        : 'bg-sky-950/40 border-sky-800/80 text-sky-300'
-                    }`}
+                    <Cpu className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    <span>Model & Kota</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeKeySettingsPanel}
+                    className="text-slate-400 hover:text-slate-200 font-bold px-2 py-1 cursor-pointer"
                   >
-                    {testResults.pexels.working ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    ) : testResults.pexels.status === 'error' ? (
-                      <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    ) : (
-                      <CheckCircle className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-                    )}
-                    <div>
-                      <div className="font-bold">Pexels Video API</div>
-                      <div className="text-[11px] opacity-90 leading-tight">{testResults.pexels.message}</div>
-                    </div>
-                  </div>
+                    ✕ Kapat
+                  </button>
                 </div>
-              )}
+              </div>
+
+              <p className="text-slate-400 leading-relaxed">
+                Girilen API anahtarları tarayıcınıza (localStorage) güvenle kaydedilir. Özel anahtar girebilir veya varsayılan sunucu anahtarını kullanabilirsiniz.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
+                    <span>Gemini API Key</span>
+                    {customGeminiKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key</span>}
+                  </label>
+                  <input
+                    type="password"
+                    value={customGeminiKey}
+                    onChange={(e) => {
+                      setCustomGeminiKey(e.target.value);
+                      runKeyTest(e.target.value, customPexelsKey);
+                    }}
+                    placeholder="AIzaSy..."
+                    className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
+                    <span>Pexels API Key</span>
+                    {customPexelsKey && <span className="text-[10px] text-emerald-400 font-normal">✓ Özel Key</span>}
+                  </label>
+                  <input
+                    type="password"
+                    value={customPexelsKey}
+                    onChange={(e) => {
+                      setCustomPexelsKey(e.target.value);
+                      runKeyTest(customGeminiKey, e.target.value);
+                    }}
+                    placeholder="5363... / pexels token"
+                    className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-red-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Key Test Results & Action */}
+              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-800">
+                <button
+                  onClick={() => runKeyTest()}
+                  disabled={isTesting}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-bold rounded-lg border border-slate-700 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shrink-0"
+                >
+                  {isTesting ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-400" />
+                  ) : (
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  )}
+                  <span>{isTesting ? 'Key\'ler Test Ediliyor...' : 'API Key\'leri Test Et'}</span>
+                </button>
+
+                {testResults && (
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Gemini Result Box */}
+                    <div
+                      className={`p-2 rounded-lg border flex items-start gap-2 ${
+                        testResults.gemini.working
+                          ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
+                          : testResults.gemini.status === 'error'
+                          ? 'bg-red-950/40 border-red-800/80 text-red-300'
+                          : 'bg-amber-950/40 border-amber-800/80 text-amber-300'
+                      }`}
+                    >
+                      {testResults.gemini.working ? (
+                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : testResults.gemini.status === 'error' ? (
+                        <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <div className="font-bold">Gemini API</div>
+                        <div className="text-[11px] opacity-90 leading-tight">{testResults.gemini.message}</div>
+                      </div>
+                    </div>
+
+                    {/* Pexels Result Box */}
+                    <div
+                      className={`p-2 rounded-lg border flex items-start gap-2 ${
+                        testResults.pexels.working
+                          ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
+                          : testResults.pexels.status === 'error'
+                          ? 'bg-red-950/40 border-red-800/80 text-red-300'
+                          : 'bg-sky-950/40 border-sky-800/80 text-sky-300'
+                      }`}
+                    >
+                      {testResults.pexels.working ? (
+                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : testResults.pexels.status === 'error' ? (
+                        <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <div className="font-bold">Pexels Video API</div>
+                        <div className="text-[11px] opacity-90 leading-tight">{testResults.pexels.message}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
