@@ -1,41 +1,25 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { Scene } from '../types';
-import { Video, Download, RefreshCw, CheckCircle, Play, Film, Sparkles, Layers, Sliders } from 'lucide-react';
-
-/**
- * Draw a video element into a canvas using "object-fit: cover" semantics.
- * Prevents distortion when compositing landscape stock clips into the 9:16 portrait canvas.
- */
-function drawVideoCover(
-  ctx: CanvasRenderingContext2D,
-  video: HTMLVideoElement,
-  cw: number,
-  ch: number
-) {
-  const vw = video.videoWidth || 16;
-  const vh = video.videoHeight || 9;
-  if (vw === 0 || vh === 0) return;
-  const scale = Math.max(cw / vw, ch / vh);
-  const sw = cw / scale;
-  const sh = ch / scale;
-  const sx = (vw - sw) / 2;
-  const sy = (vh - sh) / 2;
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
-}
-
-/**
- * Route a remote stock-video URL through our same-origin proxy so the browser can
- * draw it into the export canvas without CORS restrictions (avoiding the tainted
- * canvas that previously produced a black background in the exported video).
- */
-function buildProxiedVideoUrl(rawUrl: string | undefined): string {
-  if (!rawUrl) return '';
-  // Only proxy absolute http(s) URLs. Relative/same-origin URLs are used as-is.
-  if (/^https?:\/\//i.test(rawUrl)) {
-    return `/api/video-proxy?url=${encodeURIComponent(rawUrl)}`;
-  }
-  return rawUrl;
-}
+import {
+  Video,
+  Download,
+  RefreshCw,
+  CheckCircle,
+  Play,
+  Film,
+  Sparkles,
+  Layers,
+  Sliders,
+  X,
+  AlertCircle,
+} from 'lucide-react';
+import {
+  subscribeVideoRender,
+  getVideoRenderState,
+  getEngineCanvas,
+  startRender,
+  cancelRender,
+} from '../lib/videoRenderer';
 
 interface VideoExporterProps {
   topic: string;
@@ -52,420 +36,42 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
   speechRate,
   language,
 }) => {
-  const [isRendering, setIsRendering] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentRenderingScene, setCurrentRenderingScene] = useState(0);
-  const [renderedVideoUrl, setRenderedVideoUrl] = useState<string | null>(null);
+  const renderState = useSyncExternalStore(subscribeVideoRender, getVideoRenderState);
+
   const [includeSubtitles, setIncludeSubtitles] = useState(true);
   const [videoQuality, setVideoQuality] = useState<'720p' | '1080p'>('720p');
-  const [renderStatusText, setRenderStatusText] = useState('');
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isRendering = renderState.status === 'rendering';
+  const { progress, currentScene, statusText, resultUrl, error } = renderState;
 
-  // Revoke the rendered video's blob URL when the component unmounts to avoid leaking memory.
+  const previewRef = useRef<HTMLDivElement | null>(null);
+
+  // While rendering, mount the engine-owned live canvas into the preview area so
+  // the user can watch the recording as it is produced in the background.
   useEffect(() => {
-    return () => {
-      if (renderedVideoUrl) URL.revokeObjectURL(renderedVideoUrl);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderedVideoUrl]);
-
-  const startVideoRender = async () => {
-    if (scenes.length === 0 || isRendering) return;
-
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+    if (!isRendering) return;
+    const el = previewRef.current;
+    const canvas = getEngineCanvas();
+    if (el && canvas && canvas.parentNode !== el) {
+      el.appendChild(canvas);
     }
+  }, [isRendering, renderState.currentScene, renderState.progress, renderState.statusText]);
 
-    // Release the previous rendered video's blob URL before starting a new render,
-    // otherwise repeated re-renders leak memory (each blob stays alive until page reload).
-    setRenderedVideoUrl((prevUrl) => {
-      if (prevUrl) URL.revokeObjectURL(prevUrl);
-      return null;
+  const handleStartRender = () => {
+    if (isRendering || scenes.length === 0) return;
+    startRender({
+      topic,
+      scenes,
+      selectedVoice,
+      speechRate,
+      language,
+      includeSubtitles,
+      videoQuality,
     });
+  };
 
-    setIsRendering(true);
-    setProgress(0);
-    setRenderStatusText('Tuval Hazırlanıyor...');
-
-    const width = videoQuality === '1080p' ? 1080 : 720;
-    const height = videoQuality === '1080p' ? 1920 : 1280;
-
-    const canvas = canvasRef.current || document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      alert('Canvas context not supported in this browser.');
-      setIsRendering(false);
-      return;
-    }
-
-    // Initialize Web Audio API to record voiceover audio stream
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    const audioCtx = new AudioContextClass();
-    if (audioCtx.state === 'suspended') {
-      await audioCtx.resume();
-    }
-    const audioDest = audioCtx.createMediaStreamDestination();
-
-    // Prepare combined canvas video + Web Audio destination audio stream
-    const canvasStream = canvas.captureStream(30);
-    const videoTrack = canvasStream.getVideoTracks()[0];
-    const audioTrack = audioDest.stream.getAudioTracks()[0];
-
-    const combinedStream = new MediaStream([
-      videoTrack,
-      ...(audioTrack ? [audioTrack] : []),
-    ]);
-
-    const isTurkish = language === 'tr' || /[çğışöüÇĞİŞÖÜ]/i.test(topic) || /[çğışöüÇĞİŞÖÜ]/i.test(scenes[0]?.text || '');
-    const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
-
-    // STEP 1: Pre-fetch and decode TTS audio for ALL scenes before recording starts
-    setRenderStatusText('Seslendirme ses dosyaları indiriliyor...');
-    const sceneAudioBuffers: (AudioBuffer | null)[] = await Promise.all(
-      scenes.map(async (scene) => {
-        const text = scene.text || '';
-        if (!text) return null;
-        try {
-          const ttsUrl = `/api/tts?text=${encodeURIComponent(text)}&lang=${isTurkish ? 'tr' : language}${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
-          const res = await fetch(ttsUrl);
-          if (res.ok) {
-            const buf = await res.arrayBuffer();
-            return await audioCtx.decodeAudioData(buf);
-          }
-        } catch (e) {
-          console.warn('TTS preload error for scene:', e);
-        }
-        return null;
-      })
-    );
-
-    // STEP 2: Pre-load stock video elements for ALL scenes
-    setRenderStatusText('Stok video arka planları yükleniyor...');
-    const loadedVideos: (HTMLVideoElement | null)[] = await Promise.all(
-      scenes.map((s) => {
-        return new Promise<HTMLVideoElement | null>((resolve) => {
-          if (!s.video_url) return resolve(null);
-          const v = document.createElement('video');
-          v.muted = true;
-          v.loop = true;
-          v.playsInline = true;
-          // The stock video is fetched through our same-origin proxy (/api/video-proxy)
-          // so the canvas never becomes tainted and the Pexels background reliably shows
-          // up in the exported recording (fixes black/empty frames).
-          v.crossOrigin = 'anonymous';
-
-          let finished = false;
-          const finish = (result: HTMLVideoElement | null) => {
-            if (!finished) {
-              finished = true;
-              resolve(result);
-            }
-          };
-
-          v.onloadeddata = () => finish(v);
-          v.oncanplay = () => finish(v);
-          v.onerror = () => finish(null);
-
-          // Safety timeout 5s per video
-          setTimeout(() => finish(v.readyState >= 1 ? v : null), 5000);
-
-          v.src = buildProxiedVideoUrl(s.video_url);
-          v.load();
-        });
-      })
-    );
-
-    // STEP 3: Start MediaRecorder ONLY NOW after all assets are loaded and ready
-    let mediaRecorder: MediaRecorder | null = null;
-    const chunks: Blob[] = [];
-
-    const supportedTypes = [
-      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-      'video/mp4;codecs=avc1',
-      'video/mp4;codecs=h264,aac',
-      'video/mp4',
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm',
-    ];
-    let selectedMime = supportedTypes.find((t) => MediaRecorder.isTypeSupported(t)) || '';
-
-    try {
-      mediaRecorder = new MediaRecorder(combinedStream, selectedMime ? { mimeType: selectedMime } : undefined);
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      mediaRecorder.start();
-    } catch (e) {
-      console.warn('MediaRecorder error, falling back to default stream options:', e);
-      mediaRecorder = new MediaRecorder(combinedStream);
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      mediaRecorder.start();
-    }
-
-    // STEP 4: Render loop scene by scene
-    for (let i = 0; i < scenes.length; i++) {
-      setCurrentRenderingScene(i + 1);
-      const scene = scenes[i];
-      const sceneVideo = loadedVideos[i];
-      const audioBuffer = sceneAudioBuffers[i];
-      const currentText = (scene.text || '').trim();
-
-      if (sceneVideo) {
-        try {
-          sceneVideo.currentTime = 0;
-          sceneVideo.play().catch(() => {});
-        } catch (_) {}
-      }
-
-      setRenderStatusText(`Sahne ${i + 1} / ${scenes.length} render ediliyor (Ses & Görsel)...`);
-
-      let sourceNode: AudioBufferSourceNode | null = null;
-      let effectiveAudioDurationMs = 0;
-
-      if (audioBuffer) {
-        sourceNode = audioCtx.createBufferSource();
-        sourceNode.buffer = audioBuffer;
-        const speed = Math.max(0.5, Math.min(2.0, speechRate || 1.0));
-        sourceNode.playbackRate.value = speed;
-        // Route strictly into recording destination (no live speaker audio during render)
-        sourceNode.connect(audioDest);
-
-        effectiveAudioDurationMs = (audioBuffer.duration * 1000) / speed;
-        sourceNode.start(0);
-      }
-
-      // Exact scene duration (effective audio duration + 350ms padding)
-      const sceneDurationMs = audioBuffer
-        ? effectiveAudioDurationMs + 350
-        : Math.max(3500, currentText.length * 80);
-
-      const sceneStartTime = Date.now();
-      const rawWords = currentText ? currentText.split(/\s+/) : [];
-      let totalWordChars = 0;
-      const wordCharCounts = rawWords.map((w) => {
-        const len = w.length;
-        totalWordChars += len;
-        return len;
-      });
-
-      // Frame animation loop
-      while (Date.now() - sceneStartTime < sceneDurationMs) {
-        ctx.clearRect(0, 0, width, height);
-
-        const elapsedMs = Date.now() - sceneStartTime;
-        const audioProgressRatio = effectiveAudioDurationMs > 0
-          ? Math.min(1, elapsedMs / effectiveAudioDurationMs)
-          : Math.min(1, elapsedMs / sceneDurationMs);
-
-        // Calculate active word index dynamically based on character length weights
-        let activeWordIndex = -1;
-        if (rawWords.length > 0 && audioProgressRatio >= 0) {
-          if (audioProgressRatio >= 1.0) {
-            activeWordIndex = rawWords.length - 1;
-          } else {
-            const targetCharPos = audioProgressRatio * totalWordChars;
-            let accumulated = 0;
-            for (let wIdx = 0; wIdx < rawWords.length; wIdx++) {
-              accumulated += wordCharCounts[wIdx];
-              if (targetCharPos <= accumulated || wIdx === rawWords.length - 1) {
-                activeWordIndex = wIdx;
-                break;
-              }
-            }
-          }
-        }
-
-        // 1. Draw video background or fallback gradient
-        if (sceneVideo && sceneVideo.readyState >= 2) {
-          drawVideoCover(ctx, sceneVideo, width, height);
-        } else {
-          const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-          bgGradient.addColorStop(0, '#0f172a');
-          bgGradient.addColorStop(0.5, '#1e1b4b');
-          bgGradient.addColorStop(1, '#020617');
-          ctx.fillStyle = bgGradient;
-          ctx.fillRect(0, 0, width, height);
-        }
-
-        // 2. Draw Vignette Gradient Overlays
-        const topGrad = ctx.createLinearGradient(0, 0, 0, height * 0.2);
-        topGrad.addColorStop(0, 'rgba(0, 0, 0, 0.7)');
-        topGrad.addColorStop(1, 'transparent');
-        ctx.fillStyle = topGrad;
-        ctx.fillRect(0, 0, width, height * 0.2);
-
-        const bottomGrad = ctx.createLinearGradient(0, height * 0.6, 0, height);
-        bottomGrad.addColorStop(0, 'transparent');
-        bottomGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
-        ctx.fillStyle = bottomGrad;
-        ctx.fillRect(0, height * 0.6, width, height * 0.4);
-
-        // 3. Header Branding Text
-        ctx.font = 'bold 24px sans-serif';
-        ctx.fillStyle = '#f87171';
-        ctx.textAlign = 'left';
-        ctx.fillText('🔴 YT SHORTS AI', 40, 60);
-
-        // 4. Draw Karaoke Subtitles (5 Words Chunk)
-        if (includeSubtitles && currentText && rawWords.length > 0) {
-          const CHUNK_SIZE = 5;
-          const currentChunkIndex = activeWordIndex >= 0 ? Math.floor(activeWordIndex / CHUNK_SIZE) : 0;
-          const chunkStart = currentChunkIndex * CHUNK_SIZE;
-          const chunkEnd = Math.min(rawWords.length, chunkStart + CHUNK_SIZE);
-          const visibleWords = rawWords.slice(chunkStart, chunkEnd);
-
-          const fontSize = Math.round(width * 0.046);
-          ctx.font = `900 ${fontSize}px sans-serif, system-ui`;
-          ctx.textAlign = 'left';
-
-          const spaceWidth = ctx.measureText(' ').width;
-          const maxLineWidth = width - 120;
-
-          interface RenderWord {
-            text: string;
-            originalIndex: number;
-            width: number;
-          }
-
-          interface TextLine {
-            words: RenderWord[];
-            totalWidth: number;
-          }
-
-          const lines: TextLine[] = [];
-          let currentLineWords: RenderWord[] = [];
-          let currentLineWidth = 0;
-
-          visibleWords.forEach((wText, relIndex) => {
-            const originalIndex = chunkStart + relIndex;
-            const formattedWord = isTurkish
-              ? wText.toLocaleUpperCase('tr-TR')
-              : wText.toLocaleUpperCase('en-US');
-
-            const wordWidth = ctx.measureText(formattedWord).width;
-
-            if (
-              currentLineWords.length > 0 &&
-              currentLineWidth + spaceWidth + wordWidth > maxLineWidth
-            ) {
-              lines.push({
-                words: currentLineWords,
-                totalWidth: currentLineWidth,
-              });
-              currentLineWords = [];
-              currentLineWidth = 0;
-            }
-
-            currentLineWords.push({
-              text: formattedWord,
-              originalIndex,
-              width: wordWidth,
-            });
-            currentLineWidth += (currentLineWords.length > 1 ? spaceWidth : 0) + wordWidth;
-          });
-
-          if (currentLineWords.length > 0) {
-            lines.push({
-              words: currentLineWords,
-              totalWidth: currentLineWidth,
-            });
-          }
-
-          const lineHeight = fontSize * 1.45;
-          const boxPaddingY = Math.round(fontSize * 0.6);
-          const boxHeight = lines.length * lineHeight + boxPaddingY * 2;
-          const boxY = height - 160 - boxHeight;
-
-          ctx.save();
-
-          // Background banner
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-          ctx.beginPath();
-          ctx.roundRect(40, boxY, width - 80, boxHeight, 20);
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          // Render words
-          lines.forEach((line, lineIdx) => {
-            const lineY = boxY + boxPaddingY + (lineIdx + 0.72) * lineHeight;
-            let startX = (width - line.totalWidth) / 2;
-
-            line.words.forEach((wordObj) => {
-              const isHighlight = wordObj.originalIndex === activeWordIndex;
-
-              if (isHighlight) {
-                const pillPadX = Math.round(fontSize * 0.25);
-                const pillPadY = Math.round(fontSize * 0.12);
-                ctx.fillStyle = '#fbbf24'; // amber-400
-                ctx.beginPath();
-                ctx.roundRect(
-                  startX - pillPadX,
-                  lineY - fontSize + pillPadY,
-                  wordObj.width + pillPadX * 2,
-                  fontSize + pillPadY,
-                  8
-                );
-                ctx.fill();
-
-                ctx.fillStyle = '#000000';
-                ctx.fillText(wordObj.text, startX, lineY);
-              } else {
-                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-                ctx.shadowBlur = 4;
-                ctx.fillStyle = '#ffffff';
-                ctx.fillText(wordObj.text, startX, lineY);
-                ctx.shadowBlur = 0;
-              }
-
-              startX += wordObj.width + spaceWidth;
-            });
-          });
-
-          ctx.restore();
-        }
-
-        // Progress update
-        const elapsedScenePct = Math.min(1, elapsedMs / sceneDurationMs);
-        const overallPct = Math.round(((i + elapsedScenePct) / scenes.length) * 100);
-        setProgress(overallPct);
-
-        await new Promise((r) => setTimeout(r, 33)); // ~30 FPS
-      }
-
-      if (sourceNode) {
-        try { sourceNode.stop(); } catch (_) {}
-      }
-      if (sceneVideo) {
-        try { sceneVideo.pause(); } catch (_) {}
-      }
-    }
-
-    setRenderStatusText('Video dosyası oluşturuluyor...');
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-      await new Promise((r) => setTimeout(r, 500));
-    }
-
-    const videoBlob = new Blob(chunks, { type: selectedMime || 'video/mp4' });
-    const generatedUrl = URL.createObjectURL(videoBlob);
-
-    setRenderedVideoUrl(generatedUrl);
-    setIsRendering(false);
-    setProgress(100);
-    setRenderStatusText('Video Render Tamamlandı!');
+  const handleCancelRender = () => {
+    cancelRender();
   };
 
   return (
@@ -516,8 +122,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
               </button>
             </div>
           </div>
-
-          {/* Model Information Card */}
+{/* Model Information Card */}
           <div className="bg-slate-950/90 border border-slate-800/90 rounded-xl p-3.5 space-y-2 text-xs">
             <div className="flex items-center gap-2 font-bold text-slate-200">
               <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
@@ -545,7 +150,7 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-200 font-bold flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 animate-spin text-red-500" />
-                  {renderStatusText}
+                  {statusText}
                 </span>
                 <span className="font-extrabold text-red-400 text-sm">{progress}%</span>
               </div>
@@ -560,20 +165,45 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
               <p className="text-[11px] text-slate-400 italic text-center">
                 Canlı seslendirme, görseller ve altyazılar senkronize edilerek işleniyor...
               </p>
+
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800">
+                <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" />
+                  Arka planda devam ediyor — bu pencereyi kapatabilirsiniz.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCancelRender}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  İptal Et
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Rendered Video Download Box */}
-          {renderedVideoUrl && !isRendering && (
+          {/* Error Display */}
+          {renderState.status === 'error' && error && (
+            <div className="flex items-start gap-2.5 bg-red-950/40 border border-red-500/40 rounded-xl p-4 text-sm">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-300 font-bold">Render hatası oluştu</p>
+                <p className="text-red-200/80 text-xs mt-0.5">{error}</p>
+              </div>
+            </div>
+          )}
+{/* Rendered Video Download Box */}
+          {resultUrl && !isRendering && (
             <div className="p-5 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-4 shadow-lg">
               <div className="flex items-center space-x-2 text-emerald-400 font-bold text-sm">
-                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
                 <span>Video İşleme Tamamlandı! HD Dosyanız Hazır.</span>
               </div>
 
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <a
-                  href={renderedVideoUrl}
+                  href={resultUrl}
                   download={`yt_short_${topic.substring(0, 15).replace(/\s+/g, '_')}.mp4`}
                   className="w-full px-5 py-3.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20 transition cursor-pointer"
                 >
@@ -587,11 +217,11 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
           {/* Action Button */}
           {!isRendering && (
             <button
-              onClick={startVideoRender}
+              onClick={handleStartRender}
               className="w-full py-4 bg-gradient-to-r from-red-600 via-red-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-extrabold text-sm rounded-xl shadow-xl shadow-red-500/25 flex items-center justify-center gap-2 transition cursor-pointer"
             >
               <Video className="w-5 h-5" />
-              <span>{renderedVideoUrl ? 'Videoyu Yeniden Oluştur (Re-render)' : 'Videoyu Render Et ve Oluştur'}</span>
+              <span>{resultUrl ? 'Videoyu Yeniden Oluştur (Re-render)' : 'Videoyu Render Et ve Oluştur'}</span>
             </button>
           )}
         </div>
@@ -603,10 +233,10 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
             <span>Video Render Tuvali (9:16 Canvas)</span>
           </h5>
 
-          {renderedVideoUrl && !isRendering ? (
+          {resultUrl && !isRendering ? (
             <div className="flex flex-col items-center space-y-3">
               <video
-                src={renderedVideoUrl}
+                src={resultUrl}
                 controls
                 autoPlay
                 className="max-h-[380px] aspect-[9/16] rounded-2xl border-2 border-emerald-500/50 shadow-2xl bg-black object-contain"
@@ -614,11 +244,11 @@ export const VideoExporter: React.FC<VideoExporterProps> = ({
               <span className="text-[11px] text-emerald-400 font-semibold">✓ İşlenmiş Tam Video Önizleme</span>
             </div>
           ) : (
-            <div className="relative flex flex-col items-center justify-center">
-              <canvas
-                ref={canvasRef}
-                className={`max-h-[380px] aspect-[9/16] rounded-2xl border-2 border-red-500/30 shadow-2xl bg-black object-contain ${
-                  isRendering ? 'block' : 'hidden'
+            <div className="relative flex flex-col items-center justify-center w-full">
+              <div
+                ref={previewRef}
+                className={`max-h-[380px] aspect-[9/16] rounded-2xl border-2 overflow-hidden bg-black object-contain ${
+                  isRendering ? 'border-red-500/30 shadow-2xl' : 'border-red-500/10'
                 }`}
               />
               {!isRendering && (
