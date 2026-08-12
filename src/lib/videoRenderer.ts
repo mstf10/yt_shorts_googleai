@@ -52,16 +52,43 @@ function drawVideoCover(
 }
 
 /**
+ * Fallback background gradient when no video clip is available or ready.
+ */
+function drawFallbackGradient(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+  bgGradient.addColorStop(0, '#0f172a');
+  bgGradient.addColorStop(0.5, '#1e1b4b');
+  bgGradient.addColorStop(1, '#020617');
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, width, height);
+}
+
+/**
  * Route a remote stock-video URL through our same-origin proxy so the browser can
  * draw it into the export canvas without CORS restrictions (avoiding the tainted
  * canvas that previously produced a black background in the exported video).
  */
 function buildProxiedVideoUrl(rawUrl: string | undefined): string {
   if (!rawUrl) return '';
+  if (rawUrl.startsWith('/api/video-proxy')) return rawUrl;
   if (/^https?:\/\//i.test(rawUrl)) {
     return `/api/video-proxy?url=${encodeURIComponent(rawUrl)}`;
   }
   return rawUrl;
+}
+
+// Global AudioContext singleton to ensure initialization within user-gesture stack
+let sharedAudioCtx: AudioContext | null = null;
+
+function getOrCreateAudioContext(): AudioContext {
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+    sharedAudioCtx = new AudioContextClass();
+  }
+  if (sharedAudioCtx.state === 'suspended') {
+    sharedAudioCtx.resume().catch(() => {});
+  }
+  return sharedAudioCtx;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +150,8 @@ export function startRender(config: VideoRenderConfig): void {
     return;
   }
   cancelRequested = false;
+  // Initialize or resume AudioContext synchronously inside user click event stack
+  getOrCreateAudioContext();
   // Fire-and-forget; the heavy work continues in the background.
   void runRender(config);
 }
@@ -172,25 +201,9 @@ async function runRender(config: VideoRenderConfig) {
     return;
   }
 
-  // Initialize the Web Audio API to record the voiceover audio stream.
-  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-  const audioCtx = new AudioContextClass();
-  if (audioCtx.state === 'suspended') {
-    try {
-      await audioCtx.resume();
-    } catch (_) {}
-  }
-  const audioDest = audioCtx.createMediaStreamDestination();
-
-  // Combined canvas video + Web Audio destination audio stream.
-  const canvasStream = canvas.captureStream(30);
-  const videoTrack = canvasStream.getVideoTracks()[0];
-  const audioTrack = audioDest.stream.getAudioTracks()[0];
-
-  const combinedStream = new MediaStream([
-    videoTrack,
-    ...(audioTrack ? [audioTrack] : []),
-  ]);
+  // Draw initial canvas frame to establish canvasStream timeline
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, width, height);
 
   const isTurkish =
     language === 'tr' ||
@@ -198,9 +211,17 @@ async function runRender(config: VideoRenderConfig) {
     /[çğışöüÇĞİŞÖÜ]/i.test(scenes[0]?.text || '');
   const savedGeminiKey = localStorage.getItem('yt_shorts_gemini_key') || '';
 
-  // STEP 1: Pre-fetch and decode TTS audio for ALL scenes before recording starts.
+  // Ensure AudioContext is active and ready
+  const audioCtx = getOrCreateAudioContext();
+  if (audioCtx.state === 'suspended') {
+    try {
+      await audioCtx.resume();
+    } catch (_) {}
+  }
+
+  // STEP 1: Pre-fetch TTS audio ArrayBuffers for ALL scenes before recording starts.
   update({ statusText: 'Seslendirme ses dosyaları indiriliyor...' });
-  const sceneAudioBuffers: (AudioBuffer | null)[] = await Promise.all(
+  const sceneAudioArrayBuffers: (ArrayBuffer | null)[] = await Promise.all(
     scenes.map(async (scene) => {
       const text = scene.text || '';
       if (!text) return null;
@@ -210,8 +231,7 @@ async function runRender(config: VideoRenderConfig) {
         }${savedGeminiKey ? `&apiKey=${encodeURIComponent(savedGeminiKey)}` : ''}`;
         const res = await fetch(ttsUrl);
         if (res.ok) {
-          const buf = await res.arrayBuffer();
-          return await audioCtx.decodeAudioData(buf);
+          return await res.arrayBuffer();
         }
       } catch (e) {
         console.warn('TTS preload error for scene:', e);
@@ -221,43 +241,69 @@ async function runRender(config: VideoRenderConfig) {
   );
 
   if (cancelRequested) {
-    try {
-      await audioCtx.close();
-    } catch (_) {}
     update({ status: 'idle', progress: 0, currentScene: 0, statusText: 'Render iptal edildi.' });
     return;
   }
 
+  // Hidden container with valid layout dimensions so browser hardware video decoder does not throttle frame decoding
+  const hiddenContainer = document.createElement('div');
+  hiddenContainer.style.position = 'fixed';
+  hiddenContainer.style.top = '0';
+  hiddenContainer.style.left = '0';
+  hiddenContainer.style.width = '640px';
+  hiddenContainer.style.height = '360px';
+  hiddenContainer.style.zIndex = '-9999';
+  hiddenContainer.style.opacity = '0.01';
+  hiddenContainer.style.pointerEvents = 'none';
+  hiddenContainer.style.overflow = 'hidden';
+  document.body.appendChild(hiddenContainer);
 
   // STEP 2: Pre-load stock video elements for ALL scenes.
   update({ statusText: 'Stok video arka planları yükleniyor...' });
   const loadedVideos: (HTMLVideoElement | null)[] = await Promise.all(
     scenes.map((s) => {
       return new Promise<HTMLVideoElement | null>((resolve) => {
-        if (!s.video_url) return resolve(null);
+        if (!s.video_url) {
+          console.log(`Scene ${s.scene}: No video URL, skipping preloading`);
+          return resolve(null);
+        }
+        console.log(`Scene ${s.scene}: Attempting to preload Pexels video: ${s.video_url}`);
         const v = document.createElement('video');
         v.muted = true;
         v.loop = true;
         v.playsInline = true;
+        v.preload = 'auto';
         // Same-origin proxy => the canvas never becomes tainted (fixes black/empty frames).
         v.crossOrigin = 'anonymous';
+        hiddenContainer.appendChild(v);
 
         let finished = false;
         const finish = (result: HTMLVideoElement | null) => {
           if (!finished) {
             finished = true;
+            if (result) {
+              console.log(`Scene ${s.scene}: Video preloaded successfully, duration: ${result.duration}s`);
+            } else {
+              console.warn(`Scene ${s.scene}: Video preloading failed or timed out`);
+            }
             resolve(result);
           }
         };
 
         v.onloadeddata = () => finish(v);
         v.oncanplay = () => finish(v);
-        v.onerror = () => finish(null);
+        v.onerror = (e) => {
+          console.warn(`Scene ${s.scene}: Video load error for URL: ${s.video_url}`, e);
+          finish(null);
+        };
 
-        // Safety timeout 5s per video.
-        setTimeout(() => finish(v.readyState >= 1 ? v : null), 5000);
+        // Safety timeout 6s per video.
+        setTimeout(() => {
+          finish(v.readyState >= 1 ? v : null);
+        }, 6000);
 
-        v.src = buildProxiedVideoUrl(s.video_url);
+        const proxiedUrl = buildProxiedVideoUrl(s.video_url);
+        v.src = proxiedUrl;
         v.load();
       });
     })
@@ -265,13 +311,43 @@ async function runRender(config: VideoRenderConfig) {
 
   if (cancelRequested) {
     try {
-      await audioCtx.close();
+      hiddenContainer.remove();
     } catch (_) {}
     update({ status: 'idle', progress: 0, currentScene: 0, statusText: 'Render iptal edildi.' });
     return;
   }
 
-  // STEP 3: Start MediaRecorder ONLY NOW after all assets are loaded and ready.
+  // STEP 3: Setup Web Audio API destination and MediaRecorder
+  update({ statusText: 'Ses bileşenleri ve kayıt başlatılıyor...' });
+  if (audioCtx.state === 'suspended') {
+    try {
+      await audioCtx.resume();
+    } catch (_) {}
+  }
+
+  const audioDest = audioCtx.createMediaStreamDestination();
+
+  const sceneAudioBuffers: (AudioBuffer | null)[] = await Promise.all(
+    sceneAudioArrayBuffers.map(async (buf) => {
+      if (!buf) return null;
+      try {
+        return await audioCtx.decodeAudioData(buf.slice(0));
+      } catch (e) {
+        console.warn('Audio decode error:', e);
+        return null;
+      }
+    })
+  );
+
+  const canvasStream = canvas.captureStream(30);
+  const videoTrack = canvasStream.getVideoTracks()[0];
+  const audioTrack = audioDest.stream.getAudioTracks()[0];
+
+  const combinedStream = new MediaStream([
+    videoTrack,
+    ...(audioTrack ? [audioTrack] : []),
+  ]);
+
   let mediaRecorder: MediaRecorder | null = null;
   const chunks: Blob[] = [];
 
@@ -295,17 +371,17 @@ async function runRender(config: VideoRenderConfig) {
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
     };
-    mediaRecorder.start();
+    mediaRecorder.start(100);
   } catch (e) {
     console.warn('MediaRecorder error, falling back to default options:', e);
     mediaRecorder = new MediaRecorder(combinedStream);
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
     };
-    mediaRecorder.start();
+    mediaRecorder.start(100);
   }
 
-// STEP 4: Render loop scene by scene.
+  // STEP 4: Render loop scene by scene.
   for (let i = 0; i < scenes.length; i++) {
     if (cancelRequested) break;
 
@@ -315,11 +391,20 @@ async function runRender(config: VideoRenderConfig) {
     const audioBuffer = sceneAudioBuffers[i];
     const currentText = (scene.text || '').trim();
 
+    // Ensure video element playback is started and frames are decoding before starting scene loop
     if (sceneVideo) {
       try {
         sceneVideo.currentTime = 0;
-        sceneVideo.play().catch(() => {});
+        const playPromise = sceneVideo.play();
+        if (playPromise !== undefined) {
+          await playPromise.catch(() => {});
+        }
       } catch (_) {}
+
+      const startWait = Date.now();
+      while (sceneVideo.readyState < 2 && Date.now() - startWait < 1500) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
     }
 
     update({ statusText: `Sahne ${i + 1} / ${scenes.length} render ediliyor (Ses & Görsel)...` });
@@ -332,11 +417,11 @@ async function runRender(config: VideoRenderConfig) {
       sourceNode.buffer = audioBuffer;
       const speed = Math.max(0.5, Math.min(2.0, speechRate || 1.0));
       sourceNode.playbackRate.value = speed;
-      // Route strictly into the recording destination (no live speaker audio).
       sourceNode.connect(audioDest);
 
       effectiveAudioDurationMs = (audioBuffer.duration * 1000) / speed;
-      sourceNode.start(0);
+      // Start audio buffer precisely at the current audioCtx timeline position
+      sourceNode.start(audioCtx.currentTime);
     }
 
     // Exact scene duration (effective audio duration + 350ms padding).
@@ -383,16 +468,15 @@ async function runRender(config: VideoRenderConfig) {
         }
       }
 
-      // 1. Draw video background or fallback gradient.
+      // 1. Draw video background or fallback gradient safely.
       if (sceneVideo && sceneVideo.readyState >= 2) {
-        drawVideoCover(ctx, sceneVideo, width, height);
+        try {
+          drawVideoCover(ctx, sceneVideo, width, height);
+        } catch (e) {
+          drawFallbackGradient(ctx, width, height);
+        }
       } else {
-        const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-        bgGradient.addColorStop(0, '#0f172a');
-        bgGradient.addColorStop(0.5, '#1e1b4b');
-        bgGradient.addColorStop(1, '#020617');
-        ctx.fillStyle = bgGradient;
-        ctx.fillRect(0, 0, width, height);
+        drawFallbackGradient(ctx, width, height);
       }
 
       // 2. Draw Vignette Gradient Overlays.
@@ -554,6 +638,13 @@ async function runRender(config: VideoRenderConfig) {
     }
   }
 
+  // Cleanup
+  if (hiddenContainer) {
+    try {
+      hiddenContainer.remove();
+    } catch (_) {}
+  }
+
   update({ statusText: 'Video dosyası oluşturuluyor...' });
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
@@ -566,9 +657,6 @@ async function runRender(config: VideoRenderConfig) {
         mediaRecorder.stop();
       } catch (_) {}
     }
-    try {
-      await audioCtx.close();
-    } catch (_) {}
     update({ status: 'idle', progress: 0, currentScene: 0, statusText: 'Render iptal edildi.' });
     return;
   }
@@ -581,10 +669,6 @@ async function runRender(config: VideoRenderConfig) {
   const videoBlob = new Blob(chunks, { type: selectedMime || 'video/mp4' });
   const generatedUrl = URL.createObjectURL(videoBlob);
 
-  try {
-    await audioCtx.close();
-  } catch (_) {}
-
   update({
     status: 'done',
     progress: 100,
@@ -592,4 +676,5 @@ async function runRender(config: VideoRenderConfig) {
     statusText: 'Video Render Tamamlandı!',
   });
 }
+
 
